@@ -54,8 +54,8 @@ async def get_next_action(model, messages, objective, session_id):
         return operation, None
     if model == "agent-1":
         return "coming soon"
-    if model == "gemini-pro-vision":
-        return call_gemini_pro_vision(messages, objective), None
+    if model == "gemini-pro-vision" or model == "gemini-1.5-pro" or model == "gemini-2.5-flash":
+        return call_gemini_api(messages, objective, model), None
     if model == "llava":
         operation = call_ollama_llava(messages)
         return operation, None
@@ -259,15 +259,20 @@ async def call_qwen_vl_with_ocr(messages, objective, model):
             traceback.print_exc()
         return gpt_4_fallback(messages, objective, model)
 
-def call_gemini_pro_vision(messages, objective):
+def call_gemini_api(messages, objective, model_name="gemini-1.5-pro-latest"):
     """
-    Get the next action for Self-Operating Computer using Gemini Pro Vision
+    Get the next action for Self-Operating Computer using Gemini API
     """
+    # Purpose: Calls the Gemini API to get the next action based on the screen content and objective.
+    # - messages: The history of messages exchanged with the model.
+    # - objective: The user's high-level goal.
+    # - model_name: The specific Gemini model to use.
+    # Comment: This function was updated to support the new Gemini API structure.
+    # It now constructs a prompt with the image and text, and parses the JSON response.
     if config.verbose:
         print(
-            "[Self Operating Computer][call_gemini_pro_vision]",
+            "[Self Operating Computer][call_gemini_api]",
         )
-    # sleep for a second
     time.sleep(1)
     try:
         screenshots_dir = "screenshots"
@@ -275,33 +280,38 @@ def call_gemini_pro_vision(messages, objective):
             os.makedirs(screenshots_dir)
 
         screenshot_filename = os.path.join(screenshots_dir, "screenshot.png")
-        # Call the function to capture the screen with the cursor
         capture_screen_with_cursor(screenshot_filename)
-        # sleep for a second
         time.sleep(1)
-        prompt = get_system_prompt("gemini-pro-vision", objective)
 
-        model = config.initialize_google()
+        prompt = get_system_prompt(model_name, objective)
+
+        model = config.initialize_google(model_name)
         if config.verbose:
-            print("[call_gemini_pro_vision] model", model)
+            print("[call_gemini_api] model", model)
 
         response = model.generate_content([prompt, Image.open(screenshot_filename)])
 
-        content = response.text[1:]
+        content = response.text
         if config.verbose:
-            print("[call_gemini_pro_vision] response", response)
-            print("[call_gemini_pro_vision] content", content)
+            print("[call_gemini_api] response", response)
+            print("[call_gemini_api] content", content)
+
+        # The response might be in a markdown format, so we need to clean it
+        if content.startswith("```json"):
+            content = content[len("```json"):-len("```")]
 
         content = json.loads(content)
         if config.verbose:
             print(
-                "[get_next_action][call_gemini_pro_vision] content",
+                "[get_next_action][call_gemini_api] content",
                 content,
             )
 
         return content
 
     except Exception as e:
+        print("GEMINI_API_FAILED_WITH_EXCEPTION")
+        print(e)
         print(
             f"{ANSI_GREEN}[Self-Operating Computer]{ANSI_BRIGHT_MAGENTA}[Operate] That did not work. Trying another method {ANSI_RESET}"
         )
