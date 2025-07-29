@@ -36,6 +36,15 @@ class OperatingSystem:
         except Exception as e:
             print("[OperatingSystem][mouse] error:", e)
 
+    def scroll(self, direction):
+        try:
+            if direction == "up":
+                pyautogui.scroll(1000)
+            elif direction == "down":
+                pyautogui.scroll(-1000)
+        except Exception as e:
+            print("[OperatingSystem][scroll] error:", e)
+
     def click_at_percentage(
         self,
         x_percentage,

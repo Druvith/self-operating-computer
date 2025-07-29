@@ -160,6 +160,23 @@ def operate(operations, model):
             operate_detail = click_detail
 
             operating_system.mouse(click_detail)
+        elif operate_type == "scroll":
+            direction = operation.get("direction")
+            operate_detail = direction
+            operating_system.scroll(direction)
+        elif operate_type == "write_in":
+            label = operation.get("label")
+            content = operation.get("content")
+            operate_detail = f'label: {label}, content: {content}'
+            # The `write_in` operation is a combination of `click` and `write`
+            # as handled in the `call_gemini_api_with_ocr` function.
+            # We just need to handle the `click` and `write` here.
+            x = operation.get("x")
+            y = operation.get("y")
+            click_detail = {"x": x, "y": y}
+            operating_system.mouse(click_detail)
+            operating_system.write(content)
+
         elif operate_type == "done":
             summary = operation.get("summary")
 

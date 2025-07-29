@@ -54,8 +54,11 @@ async def get_next_action(model, messages, objective, session_id):
         return operation, None
     if model == "agent-1":
         return "coming soon"
-    if model == "gemini-pro-vision" or model == "gemini-1.5-pro" or model == "gemini-2.5-flash":
+    if model == "gemini-pro-vision" or model == "gemini-1.5-pro":
         return call_gemini_api(messages, objective, model), None
+    if model == "gemini-2.5-flash" or model == "gemini-2.5-pro":
+        operation = await call_gemini_api_with_ocr(messages, objective, model)
+        return operation, None
     if model == "llava":
         operation = call_ollama_llava(messages)
         return operation, None
@@ -259,7 +262,183 @@ async def call_qwen_vl_with_ocr(messages, objective, model):
             traceback.print_exc()
         return gpt_4_fallback(messages, objective, model)
 
-def call_gemini_api(messages, objective, model_name="gemini-1.5-pro-latest"):
+
+async def call_gemini_api_with_ocr(messages, objective, model):
+    """
+    Get the next action for Self-Operating Computer using Gemini API with OCR support
+    """
+    if config.verbose:
+        print("[call_gemini_api_with_ocr]")
+
+    try:
+        time.sleep(1)
+        screenshots_dir = "screenshots"
+        if not os.path.exists(screenshots_dir):
+            os.makedirs(screenshots_dir)
+
+        screenshot_filename = os.path.join(screenshots_dir, "screenshot.png")
+        capture_screen_with_cursor(screenshot_filename)
+
+        prompt = get_system_prompt(model, objective)
+        
+        google_model = config.initialize_google(model)
+        if config.verbose:
+            print("[call_gemini_api_with_ocr] model", google_model)
+
+        response = google_model.generate_content([prompt, Image.open(screenshot_filename)])
+
+        content = response.text
+        if config.verbose:
+            print("[call_gemini_api_with_ocr] response", response)
+            print("[call_gemini_api_with_ocr] content", content)
+
+        # Clean the response if it's in markdown format
+        if content.startswith("```json"):
+            content = content[len("```json"):-len("```")]
+
+        # used later for the messages
+        content_str = content
+
+        content = json.loads(content)
+
+        processed_content = []
+
+        for operation in content:
+            if operation.get("operation") == "click":
+                text_to_click = operation.get("text")
+                if config.verbose:
+                    print(
+                        "[call_gemini_api_with_ocr][click] text_to_click",
+                        text_to_click,
+                    )
+                
+                # Only use OCR if text is specified
+                if text_to_click is not None:
+                    # Initialize EasyOCR Reader
+                    if config.verbose:
+                        print("[call_gemini_api_with_ocr][OCR] Initializing EasyOCR with English language support")
+                    reader = easyocr.Reader(["en"])
+                    if config.verbose:
+                        print("[call_gemini_api_with_ocr][OCR] EasyOCR reader initialized with detection and recognition models")
+
+                    # Read the screenshot
+                    if config.verbose:
+                        print(f"[call_gemini_api_with_ocr][OCR] Reading text from screenshot: {screenshot_filename}")
+                    result = reader.readtext(screenshot_filename)
+                    if config.verbose:
+                        print(f"[call_gemini_api_with_ocr][OCR] Found {len(result)} text elements")
+                        for i, (bbox, text, confidence) in enumerate(result):
+                            print(f"[call_gemini_api_with_ocr][OCR] Text {i}: '{text}' (confidence: {confidence:.2f})")
+
+                    text_element_index = get_text_element(
+                        result, text_to_click, screenshot_filename
+                    )
+                    coordinates = get_text_coordinates(
+                        result, text_element_index, screenshot_filename
+                    )
+
+                    # add `coordinates`` to `content`
+                    operation["x"] = coordinates["x"]
+                    operation["y"] = coordinates["y"]
+
+                    if config.verbose:
+                        print(
+                            "[call_gemini_api_with_ocr][click] text_element_index",
+                            text_element_index,
+                        )
+                        print(
+                            "[call_gemini_api_with_ocr][click] coordinates",
+                            coordinates,
+                        )
+                        print(
+                            "[call_gemini_api_with_ocr][click] final operation",
+                            operation,
+                        )
+                else:
+                    if config.verbose:
+                        print("[call_gemini_api_with_ocr][click] No text specified, using provided coordinates")
+
+                processed_content.append(operation)
+
+            elif operation.get("operation") == "write_in":
+                label = operation.get("label")
+                content_to_write = operation.get("content")
+                if config.verbose:
+                    print(
+                        f"[call_gemini_api_with_ocr][write_in] label: {label}, content: {content_to_write}"
+                    )
+
+                reader = easyocr.Reader(["en"])
+                result = reader.readtext(screenshot_filename)
+                text_element_index = get_text_element(
+                    result, label, screenshot_filename
+                )
+                coordinates = get_text_coordinates(
+                    result, text_element_index, screenshot_filename
+                )
+
+                # Assuming the input field is to the right of the label
+                operation["x"] = coordinates["x"] + 0.05 
+                operation["y"] = coordinates["y"]
+                
+                # Replace "write_in" with "click" and then add a "write" operation
+                click_operation = {"operation": "click", "x": operation["x"], "y": operation["y"]}
+                write_operation = {"operation": "write", "content": content_to_write}
+                processed_content.extend([click_operation, write_operation])
+
+            elif operation.get("operation") == "read_text_from":
+                anchor = operation.get("anchor")
+                if config.verbose:
+                    print(f"[call_gemini_api_with_ocr][read_text_from] anchor: {anchor}")
+
+                reader = easyocr.Reader(["en"])
+                result = reader.readtext(screenshot_filename)
+                
+                anchor_element_index = get_text_element(
+                    result, anchor, screenshot_filename
+                )
+                anchor_coordinates = get_text_coordinates(
+                    result, anchor_element_index, screenshot_filename
+                )
+
+                # Define a region around the anchor to read text from
+                x, y = anchor_coordinates["x"], anchor_coordinates["y"]
+                width, height = 0.2, 0.1 # Define a search area, can be adjusted
+                
+                read_text = ""
+                for i, (bbox, text, confidence) in enumerate(result):
+                    text_x = (bbox[0][0] + bbox[1][0]) / 2 / Image.open(screenshot_filename).width
+                    text_y = (bbox[0][1] + bbox[2][1]) / 2 / Image.open(screenshot_filename).height
+                    if x < text_x < x + width and y < text_y < y + height:
+                        read_text += text + " "
+                
+                # We need to re-prompt the model with the read text
+                # This is a simplified approach. A more robust solution would be to
+                # add the read text to the message history and re-run the model.
+                # For now, we'll just print it to the console.
+                print(f"[call_gemini_api_with_ocr][read_text_from] Read text: {read_text}")
+                # We don't add any operation to processed_content as this is an information gathering step
+
+            else:
+                processed_content.append(operation)
+
+        # wait to append the assistant message so that if the `processed_content` step fails we don't append a message and mess up message history
+        assistant_message = {"role": "assistant", "content": content_str}
+        messages.append(assistant_message)
+
+        return processed_content
+
+    except Exception as e:
+        print(
+            f"{ANSI_GREEN}[Self-Operating Computer]{ANSI_BRIGHT_MAGENTA}[{model}] That did not work. Trying another method {ANSI_RESET}"
+        )
+        if config.verbose:
+            print("[call_gemini_api_with_ocr] error", e)
+            traceback.print_exc()
+        return call_gpt_4o(messages)
+
+
+def call_gemini_api(messages, objective, model_name="gemini-2.5-flash"):
     """
     Get the next action for Self-Operating Computer using Gemini API
     """

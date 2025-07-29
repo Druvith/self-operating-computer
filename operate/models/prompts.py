@@ -136,19 +136,33 @@ From looking at the screen, the objective, and your previous actions, take the n
 
 You have 4 possible operation actions available to you. The `pyautogui` library will be used to execute your decision. Your output will be used in a `json.loads` loads statement.
 
-1. click - Move mouse and click - Look for text to click. Try to find relevant text to click, but if there's nothing relevant enough you can return `"nothing to click"` for the text value and we'll try a different method.
+**IMPORTANT: When you specify a "text" field in a click operation, that exact text will be passed to EasyOCR (Optical Character Recognition) to scan the screenshot and find the precise pixel coordinates. EasyOCR will then automatically calculate the x,y coordinates for PyAutoGUI to click. Be very precise with the text - it must match exactly what's visible on screen.**
+
+1. click - Move mouse and click using OCR text detection. The text you specify will be searched for using EasyOCR, and the system will automatically click at the detected coordinates.
 ```
-[{{ "thought": "write a thought here", "operation": "click", "text": "The text in the button or link to click" }}]  
+[{{ "thought": "write a thought here", "operation": "click", "text": "Exact text as it appears on screen" }}]  
 ```
-2. write - Write with your keyboard
+- The text must match exactly what you see (case-sensitive, including spaces/punctuation)
+- EasyOCR will scan the screenshot to find this text and calculate click coordinates
+- If text is not found by OCR, the operation will fail
+- Choose clear, unique text that OCR can reliably detect
+
+2. write - Write with your keyboard. This is best used for input fields. If you need to write in a specific input field, use the `label` parameter to specify the field.
 ```
 [{{ "thought": "write a thought here", "operation": "write", "content": "text to write here" }}]
 ```
-3. press - Use a hotkey or press key to operate the computer
+
+3. scroll - Scroll up or down
+```
+[{{ "thought": "write a thought here", "operation": "scroll", "direction": "up" or "down" }}]
+```
+
+5. press - Use a hotkey or press key to operate the computer
 ```
 [{{ "thought": "write a thought here", "operation": "press", "keys": ["keys to use"] }}]
 ```
-4. done - The objective is completed
+
+6. done - The objective is completed
 ```
 [{{ "thought": "write a thought here", "operation": "done", "summary": "summary of what was completed" }}]
 ```
@@ -178,7 +192,7 @@ Example 2: Open a new Google Docs when the browser is already open
 Example 3: Search for someone on Linkedin when already on linkedin.com
 ```
 [
-    {{ "thought": "I can see the search field with the placeholder text 'search'. I click that field to search", "operation": "click", "text": "search" }},
+    {{ "thought": "I can see the search field with the placeholder text 'Search'. I need to match the exact text as it appears for OCR to find it", "operation": "click", "text": "Search" }},
     {{ "thought": "Now that the field is active I can write the name of the person I'd like to search for", "operation": "write", "content": "John Doe" }},
     {{ "thought": "Finally I'll submit the search form with enter", "operation": "press", "keys": ["enter"] }}
 ]
@@ -232,7 +246,7 @@ def get_system_prompt(model, objective):
             os_search_str=os_search_str,
             operating_system=operating_system,
         )
-    elif model == "gpt-4-with-ocr" or model == "gpt-4.1-with-ocr" or model == "o1-with-ocr" or model == "claude-3" or model == "qwen-vl":
+    elif model == "gpt-4-with-ocr" or model == "gpt-4.1-with-ocr" or model == "o1-with-ocr" or model == "claude-3" or model == "qwen-vl" or model == "gemini-2.5-flash" or model == "gemini-2.5-pro":
 
         prompt = SYSTEM_PROMPT_OCR.format(
             objective=objective,
