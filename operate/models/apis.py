@@ -213,7 +213,7 @@ async def call_qwen_vl_with_ocr(messages, objective, model):
                         text_to_click,
                     )
                 # Initialize EasyOCR Reader
-                reader = easyocr.Reader(["en"])
+                reader = easyocr.Reader(["en"], gpu=True)
 
                 # Read the screenshot
                 result = reader.readtext(screenshot_filename)
@@ -317,7 +317,7 @@ async def call_gemini_api_with_ocr(messages, objective, model):
                     # Initialize EasyOCR Reader
                     if config.verbose:
                         print("[call_gemini_api_with_ocr][OCR] Initializing EasyOCR with English language support")
-                    reader = easyocr.Reader(["en"])
+                    reader = easyocr.Reader(["en"], gpu=True)
                     if config.verbose:
                         print("[call_gemini_api_with_ocr][OCR] EasyOCR reader initialized with detection and recognition models")
 
@@ -362,13 +362,13 @@ async def call_gemini_api_with_ocr(messages, objective, model):
 
             elif operation.get("operation") == "write_in":
                 label = operation.get("label")
-                content_to_write = operation.get("content")
+                content_to_write = operation.get("content") 
                 if config.verbose:
                     print(
                         f"[call_gemini_api_with_ocr][write_in] label: {label}, content: {content_to_write}"
                     )
 
-                reader = easyocr.Reader(["en"])
+                reader = easyocr.Reader(["en"], gpu=True)
                 result = reader.readtext(screenshot_filename)
                 text_element_index = get_text_element(
                     result, label, screenshot_filename
@@ -391,7 +391,7 @@ async def call_gemini_api_with_ocr(messages, objective, model):
                 if config.verbose:
                     print(f"[call_gemini_api_with_ocr][read_text_from] anchor: {anchor}")
 
-                reader = easyocr.Reader(["en"])
+                reader = easyocr.Reader(["en"], gpu=True)
                 result = reader.readtext(screenshot_filename)
                 
                 anchor_element_index = get_text_element(
@@ -563,7 +563,7 @@ async def call_gpt_4o_with_ocr(messages, objective, model):
                         text_to_click,
                     )
                 # Initialize EasyOCR Reader
-                reader = easyocr.Reader(["en"])
+                reader = easyocr.Reader(["en"], gpu=True)
 
                 # Read the screenshot
                 result = reader.readtext(screenshot_filename)
@@ -672,7 +672,7 @@ async def call_gpt_4_1_with_ocr(messages, objective, model):
                         "[call_gpt_4_1_with_ocr][click] text_to_click",
                         text_to_click,
                     )
-                reader = easyocr.Reader(["en"])
+                reader = easyocr.Reader(["en"], gpu=True)
 
                 result = reader.readtext(screenshot_filename)
 
@@ -782,7 +782,7 @@ async def call_o1_with_ocr(messages, objective, model):
                         text_to_click,
                     )
                 # Initialize EasyOCR Reader
-                reader = easyocr.Reader(["en"])
+                reader = easyocr.Reader(["en"], gpu=True)
 
                 # Read the screenshot
                 result = reader.readtext(screenshot_filename)
@@ -1171,7 +1171,7 @@ async def call_claude_3_with_ocr(messages, objective, model):
                         text_to_click,
                     )
                 # Initialize EasyOCR Reader
-                reader = easyocr.Reader(["en"])
+                reader = easyocr.Reader(["en"], gpu=True)
 
                 # Read the screenshot
                 result = reader.readtext(screenshot_filename)

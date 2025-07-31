@@ -104,6 +104,7 @@ def main(model, terminal_prompt, voice_mode=False, verbose_mode=False):
 
     session_id = None
 
+    start_time = time.time()
     while True:
         if config.verbose:
             print("[Self Operating Computer] loop_count", loop_count)
@@ -112,7 +113,7 @@ def main(model, terminal_prompt, voice_mode=False, verbose_mode=False):
                 get_next_action(model, messages, objective, session_id)
             )
 
-            stop = operate(operations, model)
+            stop = operate(operations, model, start_time)
             if stop:
                 break
 
@@ -131,7 +132,7 @@ def main(model, terminal_prompt, voice_mode=False, verbose_mode=False):
             break
 
 
-def operate(operations, model):
+def operate(operations, model, start_time):
     if config.verbose:
         print("[Self Operating Computer][operate]")
     for operation in operations:
@@ -179,11 +180,14 @@ def operate(operations, model):
 
         elif operate_type == "done":
             summary = operation.get("summary")
+            end_time = time.time()
+            total_time = end_time - start_time
 
             print(
                 f"[{ANSI_GREEN}Self-Operating Computer {ANSI_RESET}|{ANSI_BRIGHT_MAGENTA} {model}{ANSI_RESET}]"
             )
             print(f"{ANSI_BLUE}Objective Complete: {ANSI_RESET}{summary}\n")
+            print(f"{ANSI_BLUE}Total time taken: {ANSI_RESET}{total_time:.2f} seconds\n")
             return True
 
         else:
