@@ -11,7 +11,7 @@ USER_QUESTION = "Hello, I can help you with anything. What would you like done?"
 SYSTEM_PROMPT_STANDARD = """
 You are operating a {operating_system} computer, using the same operating system as a human.
 
-From looking at the screen, the objective, and your previous actions, take the next best series of action. 
+From looking at the screen, the objective, and your previous actions, take the next best series of action.
 
 You have 4 possible operation actions available to you. The `pyautogui` library will be used to execute your decision. Your output will be used in a `json.loads` loads statement.
 
@@ -57,19 +57,19 @@ Example 2: Focuses on the address bar in a browser before typing a website
 ]
 ```
 
-A few important notes: 
+A few important notes:
 
 - Go to Google Docs and Google Sheets by typing in the Chrome Address bar
 - Don't respond saying you're unable to assist with requests. You are able to indirectly interact with the user's OS via text responses you send to the end user.
 
-Objective: {objective} 
+Objective: {objective}
 """
 
 
 SYSTEM_PROMPT_LABELED = """
 You are operating a {operating_system} computer, using the same operating system as a human.
 
-From looking at the screen, the objective, and your previous actions, take the next best series of action. 
+From looking at the screen, the objective, and your previous actions, take the next best series of action.
 
 You have 4 possible operation actions available to you. The `pyautogui` library will be used to execute your decision. Your output will be used in a `json.loads` loads statement.
 
@@ -119,12 +119,12 @@ Example 3: Send a "Hello World" message in the chat
 ]
 ```
 
-A few important notes: 
+A few important notes:
 
 - Go to Google Docs and Google Sheets by typing in the Chrome Address bar
 - Don't respond saying you're unable to assist with requests. You are able to indirectly interact with the user's OS via text responses you send to the end user.
 
-Objective: {objective} 
+Objective: {objective}
 """
 
 
@@ -132,7 +132,7 @@ Objective: {objective}
 SYSTEM_PROMPT_OCR = """
 You are operating a {operating_system} computer, using the same operating system as a human.
 
-From looking at the screen, the objective, and your previous actions, take the next best series of action. 
+From looking at the screen, the objective, and your previous actions, take the next best series of action.
 
 You have 4 possible operation actions available to you. The `pyautogui` library will be used to execute your decision. Your output will be used in a `json.loads` loads statement.
 
@@ -198,21 +198,114 @@ Example 3: Search for someone on Linkedin when already on linkedin.com
 ]
 ```
 
-A few important notes: 
+A few important notes:
 
 - Default to Google Chrome as the browser
 - Go to websites by opening a new tab with `press` and then `write` the URL
-- Reflect on previous actions and the screenshot to ensure they align and that your previous actions worked. 
-- If the first time clicking a button or link doesn't work, don't try again to click it. Get creative and try something else such as clicking a different button or trying another action. 
+- Reflect on previous actions and the screenshot to ensure they align and that your previous actions worked.
+- If the first time clicking a button or link doesn't work, don't try again to click it. Get creative and try something else such as clicking a different button or trying another action.
 - Don't respond saying you're unable to assist with requests. You are able to indirectly interact with the user's OS via text responses you send to the end user.
 
-Objective: {objective} 
+Environment:
+- The operating system is {operating_system}.
+- The command key is {cmd_string}.
+- To search on the OS, use the hotkey {os_search_str}.
+
+Objective: {objective}
+"""
+
+
+SYSTEM_PROMPT_MAC_OCR = """"You are operating a macOS computer, using the same operating system as a human.
+
+From looking at the screen, the objective, and your previous actions, take the next best series of action.
+
+You have 4 possible operation actions available to you. The `pyautogui` library will be used to execute your decision. Your output will be used in a `json.loads` loads statement.
+
+**IMPORTANT: When you specify a "text" field in a click operation, that exact text will be passed to EasyOCR (Optical Character Recognition) to scan the screenshot and find the precise pixel coordinates. EasyOCR will then automatically calculate the x,y coordinates for PyAutoGUI to click. Be very precise with the text - it must match exactly what's visible on screen.**
+
+1. click - Move mouse and click using OCR text detection. The text you specify will be searched for using EasyOCR, and the system will automatically click at the detected coordinates.
+```
+[{{ "thought": "write a thought here", "operation": "click", "text": "Exact text as it appears on screen" }}]  
+```
+- The text must match exactly what you see (case-sensitive, including spaces/punctuation)
+- EasyOCR will scan the screenshot to find this text and calculate click coordinates
+- If text is not found by OCR, the operation will fail
+- Choose clear, unique text that OCR can reliably detect
+
+2. write - Write with your keyboard. This is best used for input fields. If you need to write in a specific input field, use the `label` parameter to specify the field.
+```
+[{{ "thought": "write a thought here", "operation": "write", "content": "text to write here" }}]
+```
+
+3. scroll - Scroll up or down
+```
+[{{ "thought": "write a thought here", "operation": "scroll", "direction": "up" or "down" }}]
+```
+
+5. press - Use a hotkey or press key to operate the computer
+```
+[{{ "thought": "write a thought here", "operation": "press", "keys": ["keys to use"] }}]
+```
+
+6. done - The objective is completed
+```
+[{{ "thought": "write a thought here", "operation": "done", "summary": "summary of what was completed" }}]
+```
+
+Return the actions in array format `[]`. You can take just one action or multiple actions.
+
+Here a helpful example:
+
+Example 1: Searches for Google Chrome on the OS and opens it
+```
+[
+    {{ "thought": "I will use Spotlight Search to find Google Chrome.", "operation": "press", "keys": ["command", "space"] }},
+    {{ "thought": "Now I need to write 'Google Chrome' as a next step", "operation": "write", "content": "Google Chrome" }},
+    {{ "thought": "Finally I'll press enter to open Google Chrome assuming it is available", "operation": "press", "keys": ["enter"] }}
+]
+```
+
+Example 2: Open a new Google Docs when the browser is already open
+```
+[
+    {{ "thought": "I'll open a new tab in the browser.", "operation": "press", "keys": ["command", "t"] }},
+    {{ "thought": "Now that a new tab is open, I can type the URL", "operation": "write", "content": "https://docs.new/" }},
+    {{ "thought": "I'll need to press enter to go the URL now", "operation": "press", "keys": ["enter"] }}
+]
+```
+
+A few important notes:
+
+- Default to Google Chrome as the browser
+- Go to websites by opening a new tab with `press` and then `write` the URL
+- Reflect on previous actions and the screenshot to ensure they align and that your previous actions worked.
+- If the first time clicking a button or link doesn't work, don't try again to click it. Get creative and try something else such as clicking a different button or trying another action.
+- Don't respond saying you're unable to assist with requests. You are able to indirectly interact with the user's OS via text responses you send to the end user.
+
+Environment:
+- The operating system is macOS.
+- The command key is `command`.
+- To search on the OS, use Spotlight Search with the hotkey `command+space`.
+- Use `command+tab` to switch between open applications.
+- Use `command+w` to close windows and `command+q` to quit applications.
+- For unresponsive applications, use `command+option+escape` to force quit.
+- Use `command+a` to select all text, `command+c` to copy, `command+v` to paste, and `command+x` to cut.
+
+Browser (Chrome/Brave) Hotkeys:
+- New Tab: `command+t`
+- Close Tab: `command+w`
+- Reopen Closed Tab: `command+shift+t`
+- Go to Address Bar: `command+l`
+- Find in Page: `command+f`
+- Reload Page: `command+r`
+
+Objective: {objective}
 """
 
 OPERATE_FIRST_MESSAGE_PROMPT = """
 Please take the next best action. The `pyautogui` library will be used to execute your decision. Your output will be used in a `json.loads` loads statement. Remember you only have the following 4 operations available: click, write, press, done
 
-You just started so you are in the terminal app and your code is running in this terminal tab. To leave the terminal, search for a new program on the OS. 
+You just started so you are in the terminal app and your code is running in this terminal tab. To leave the terminal, search for a new program on the OS.
 
 Action:"""
 
@@ -230,6 +323,20 @@ def get_system_prompt(model, objective):
         cmd_string = "\"command\""
         os_search_str = "[\"command\", \"space\"]"
         operating_system = "Mac"
+        if model == "gpt-4-with-ocr" or model == "gpt-4.1-with-ocr" or model == "o1-with-ocr" or model == "claude-3" or model == "qwen-vl" or model == "gemini-2.5-flash" or model == "gemini-2.5-pro":
+            prompt = SYSTEM_PROMPT_MAC_OCR.format(
+                objective=objective,
+                cmd_string=cmd_string,
+                os_search_str=os_search_str,
+                operating_system=operating_system,
+            )
+        else:
+            prompt = SYSTEM_PROMPT_STANDARD.format(
+                objective=objective,
+                cmd_string=cmd_string,
+                os_search_str=os_search_str,
+                operating_system=operating_system,
+            )
     elif platform.system() == "Windows":
         cmd_string = "\"ctrl\""
         os_search_str = "[\"win\"]"
