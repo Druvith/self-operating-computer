@@ -169,6 +169,11 @@ You have 4 possible operation actions available to you. The `pyautogui` library 
 
 Return the actions in array format `[]`. You can take just one action or multiple actions.
 
+Before deciding on your action, evaluate the following:
+1. Is this action appropriate given the current screen context?
+2. Is there a more direct approach to achieve the objective?
+3. Have I considered potential failure points of this action?
+
 Here a helpful example:
 
 Example 1: Searches for Google Chrome on the OS and opens it
@@ -254,6 +259,11 @@ You have 4 possible operation actions available to you. The `pyautogui` library 
 
 Return the actions in array format `[]`. You can take just one action or multiple actions.
 
+Before deciding on your action, evaluate the following:
+1. Is this action appropriate given the current screen context?
+2. Is there a more direct approach to achieve the objective?
+3. Have I considered potential failure points of this action?
+
 Here a helpful example:
 
 Example 1: Searches for Google Chrome on the OS and opens it
@@ -305,12 +315,22 @@ Objective: {objective}
 OPERATE_FIRST_MESSAGE_PROMPT = """
 Please take the next best action. The `pyautogui` library will be used to execute your decision. Your output will be used in a `json.loads` loads statement. Remember you only have the following 4 operations available: click, write, press, done
 
+Before deciding, evaluate:
+1. Is this action appropriate given the current screen context?
+2. Is there a more direct approach to achieve the objective?
+
 You just started so you are in the terminal app and your code is running in this terminal tab. To leave the terminal, search for a new program on the OS.
 
 Action:"""
 
 OPERATE_PROMPT = """
 Please take the next best action. The `pyautogui` library will be used to execute your decision. Your output will be used in a `json.loads` loads statement. Remember you only have the following 4 operations available: click, write, press, done
+
+Before deciding, evaluate:
+1. Is this action appropriate given the current screen context?
+2. Is there a more direct approach to achieve the objective?
+3. Have I considered potential failure points of this action?
+
 Action:"""
 
 
