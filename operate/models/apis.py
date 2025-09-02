@@ -4,10 +4,10 @@ import json
 import os
 import time
 import traceback
+from importlib import resources
 
 import easyocr
 import ollama
-import pkg_resources
 from PIL import Image
 from ultralytics import YOLO
 
@@ -839,7 +839,7 @@ async def call_gpt_4o_labeled(messages, objective, model):
         client = config.initialize_openai()
 
         confirm_system_prompt(messages, objective, model)
-        file_path = pkg_resources.resource_filename("operate.models.weights", "best.pt")
+        file_path = resources.files('operate.models.weights') / 'best.pt'
         yolo_model = YOLO(file_path)  # Load your trained model
         screenshots_dir = "screenshots"
         if not os.path.exists(screenshots_dir):

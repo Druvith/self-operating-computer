@@ -128,7 +128,7 @@ Objective: {objective}
 """
 
 
-# TODO: Add an example or instruction about `Action: press ['pagedown']` to scroll
+# TODO: Add an example or instruction about `Action: press ["pagedown"]` to scroll
 SYSTEM_PROMPT_OCR = """
 You are operating a {operating_system} computer, using the same operating system as a human.
 
@@ -220,11 +220,11 @@ Objective: {objective}
 """
 
 
-SYSTEM_PROMPT_MAC_OCR = """"You are operating a macOS computer, using the same operating system as a human.
+SYSTEM_PROMPT_MAC_OCR = """"You are operating a computer, using the same operating system as a human.
 
 From looking at the screen, the objective, and your previous actions, take the next best series of action.
 
-You have 4 possible operation actions available to you. The `pyautogui` library will be used to execute your decision. Your output will be used in a `json.loads` loads statement.
+You have 5 possible operation actions available to you. The `pyautogui` library will be used to execute your decision. Your output will be used in a `json.loads` loads statement.
 
 **IMPORTANT: When you specify a "text" field in a click operation, that exact text will be passed to EasyOCR (Optical Character Recognition) to scan the screenshot and find the precise pixel coordinates. EasyOCR will then automatically calculate the x,y coordinates for PyAutoGUI to click. Be very precise with the text - it must match exactly what's visible on screen.**
 
@@ -257,6 +257,14 @@ You have 4 possible operation actions available to you. The `pyautogui` library 
 [{{ "thought": "write a thought here", "operation": "done", "summary": "summary of what was completed" }}]
 ```
 
+**Quiz Solving Rule:** If you detect a quiz on the screen, you **MUST** use the `solve_quiz` tool. Do **NOT** use a search engine or any other method to find the answer. This is the only way to get the correct answer.
+
+7. solve_quiz - Use this tool to solve quizzes.
+```
+[{{ "thought": "I have identified a quiz on the screen. I must use the solve_quiz tool to get the answer.", "operation": "solve_quiz", "question": "The full text of the question", "choices": ["Choice 1", "Choice 2", "Choice 3"] }}]
+```
+- The system will provide the correct answer. Your next action **MUST** be to `click` that answer.
+
 Return the actions in array format `[]`. You can take just one action or multiple actions.
 
 Before deciding on your action, evaluate the following:
@@ -281,6 +289,13 @@ Example 2: Open a new Google Docs when the browser is already open
     {{ "thought": "I'll open a new tab in the browser.", "operation": "press", "keys": ["command", "t"] }},
     {{ "thought": "Now that a new tab is open, I can type the URL", "operation": "write", "content": "https://docs.new/" }},
     {{ "thought": "I'll need to press enter to go the URL now", "operation": "press", "keys": ["enter"] }}
+]
+```
+
+Example 3: How to solve a quiz
+```
+[
+    {{ "thought": "I have identified a quiz on the screen, so I must use the `solve_quiz` tool as instructed.", "operation": "solve_quiz", "question": "What is the capital of France?", "choices": ["Paris", "London", "Berlin", "Madrid"] }}
 ]
 ```
 
@@ -313,13 +328,12 @@ Objective: {objective}
 """
 
 OPERATE_FIRST_MESSAGE_PROMPT = """
-Please take the next best action. The `pyautogui` library will be used to execute your decision. Your output will be used in a `json.loads` loads statement. Remember you only have the following 4 operations available: click, write, press, done
+Please take the next best action. The `pyautogui` library will be used to execute your decision. Your output will be used in a `json.loads` loads statement. Remember you only have the following 4 operations available: click, write, scroll,̀ press, done
 
 Before deciding, evaluate:
 1. Is this action appropriate given the current screen context?
 2. Is there a more direct approach to achieve the objective?
 
-You just started so you are in the terminal app and your code is running in this terminal tab. To leave the terminal, search for a new program on the OS.
 
 Action:"""
 

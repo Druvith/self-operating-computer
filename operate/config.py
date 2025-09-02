@@ -148,7 +148,7 @@ class Config:
             or model == "o1-with-ocr",
         )
         self.require_api_key(
-            "GOOGLE_API_KEY", "Google API key", model == "gemini-pro-vision" or model == "gemini-1.5-pro" or model == "gemini-2.5-flash"
+            "GOOGLE_API_KEY", "Google API key", model == "gemini-pro-vision" or model == "gemini-1.5-pro" or model == "gemini-2.5-flash" or model == "gemini-2.5-pro"
         )
         self.require_api_key(
             "ANTHROPIC_API_KEY", "Anthropic API key", model == "claude-3"

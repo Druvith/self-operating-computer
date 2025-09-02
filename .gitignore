@@ -164,3 +164,9 @@ cython_debug/
 # Avoid sending testing screenshots up
 *.png
 operate/screenshots/
+ocr/
+scratchpad.md 
+screenshots/
+
+# Temporary directory for experiments
+/temp/

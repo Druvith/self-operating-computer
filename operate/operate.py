@@ -24,6 +24,7 @@ from operate.utils.style import (
 )
 from operate.utils.operating_system import OperatingSystem
 from operate.models.apis import get_next_action
+from operate.tools import solve_quiz
 
 # Load configuration
 config = Config()
@@ -113,12 +114,12 @@ def main(model, terminal_prompt, voice_mode=False, verbose_mode=False):
                 get_next_action(model, messages, objective, session_id)
             )
 
-            stop = operate(operations, model, start_time)
+            stop = operate(operations, messages, model, start_time)
             if stop:
                 break
 
             loop_count += 1
-            if loop_count > 10:
+            if loop_count > 50:
                 break
         except ModelNotRecognizedException as e:
             print(
@@ -132,54 +133,68 @@ def main(model, terminal_prompt, voice_mode=False, verbose_mode=False):
             break
 
 
-def operate(operations, model, start_time):
+def operate(operations, messages, model, start_time):
     if config.verbose:
         print("[Self Operating Computer][operate]")
-    for operation in operations:
+    for op in operations:
         if config.verbose:
-            print("[Self Operating Computer][operate] operation", operation)
+            print("[Self Operating Computer][operate] operation", op)
         # wait one second
         time.sleep(1)
-        operate_type = operation.get("operation").lower()
-        operate_thought = operation.get("thought")
+
+        operate_type = op.get("operation").lower()
+        operate_thought = op.get("thought")
         operate_detail = ""
         if config.verbose:
             print("[Self Operating Computer][operate] operate_type", operate_type)
 
         if operate_type == "press" or operate_type == "hotkey":
-            keys = operation.get("keys")
+            keys = op.get("keys")
             operate_detail = keys
             operating_system.press(keys)
         elif operate_type == "write":
-            content = operation.get("content")
+            content = op.get("content")
             operate_detail = content
             operating_system.write(content)
         elif operate_type == "click":
-            x = operation.get("x")
-            y = operation.get("y")
+            x = op.get("x")
+            y = op.get("y")
             click_detail = {"x": x, "y": y}
             operate_detail = click_detail
 
             operating_system.mouse(click_detail)
         elif operate_type == "scroll":
-            direction = operation.get("direction")
+            direction = op.get("direction")
             operate_detail = direction
             operating_system.scroll(direction)
+        elif operate_type == "solve_quiz":
+            question = op.get("question")
+            #choices = op.get("choices")
+            operate_detail = f"Solving quiz for: {question}"
+            
+            correct_answer = solve_quiz(question)
+            
+            summary = f"I have solved the quiz. The correct answer for '{question}' is '{correct_answer}'. My next action will be to click this answer."
+            messages.append({"role": "assistant", "content": summary})
+            print(f"[{ANSI_GREEN}Self-Operating Computer {ANSI_RESET}|{ANSI_BRIGHT_MAGENTA} {model}{ANSI_RESET}]")
+            print(f"{operate_thought}")
+            print(f"{ANSI_BLUE}Action: {ANSI_RESET}{summary}\n")
+            continue # Proceed to the next loop to get the click action
         elif operate_type == "write_in":
-            label = operation.get("label")
-            content = operation.get("content")
+            label = op.get("label")
+            content = op.get("content")
             operate_detail = f'label: {label}, content: {content}'
             # The `write_in` operation is a combination of `click` and `write`
             # as handled in the `call_gemini_api_with_ocr` function.
             # We just need to handle the `click` and `write` here.
-            x = operation.get("x")
-            y = operation.get("y")
+            x = op.get("x")
+            y = op.get("y")
             click_detail = {"x": x, "y": y}
             operating_system.mouse(click_detail)
             operating_system.write(content)
 
         elif operate_type == "done":
-            summary = operation.get("summary")
+            summary = op.get("summary")
             end_time = time.time()
             total_time = end_time - start_time
 
@@ -192,10 +207,10 @@ def operate(operations, model, start_time):
 
         else:
             print(
-                f"{ANSI_GREEN}[Self-Operating Computer]{ANSI_RED}[Error] unknown operation response :({ANSI_RESET}"
+                f"[{ANSI_GREEN}Self-Operating Computer]{ANSI_RED}[Error] unknown operation response :({ANSI_RESET}"
             )
             print(
-                f"{ANSI_GREEN}[Self-Operating Computer]{ANSI_RED}[Error] AI response {ANSI_RESET}{operation}"
+                f"[{ANSI_GREEN}[Self-Operating Computer]{ANSI_RED}[Error] AI response {ANSI_RESET}{op}"
             )
             return True
 
