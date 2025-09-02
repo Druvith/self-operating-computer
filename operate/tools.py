@@ -1,13 +1,9 @@
-
 import os
 import psycopg2
 from dotenv import load_dotenv
-import time
 
 def get_connection():
     """Establishes a database connection using credentials from .env file."""
-    # Note: For now, this points to the .env file in the /temp directory.
-    # In a production scenario, this path should be handled by a proper config system.
     dotenv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../temp/.env'))
     load_dotenv(dotenv_path=dotenv_path)
 
@@ -29,11 +25,9 @@ def get_connection():
         host=host, port=port, sslmode=sslmode
     )
 
-def solve_quiz(question: str):
+def solve_quiz(question: str, choices: list = None):
     """
     Finds the correct answer to a quiz question from the database.
-    The 'choices' parameter is included to match the tool definition for the model,
-    but is not used in the current implementation.
     """
     print(f"[Quiz Solver Tool] Received question: \"{question}\"")
     try:

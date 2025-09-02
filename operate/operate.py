@@ -169,10 +169,10 @@ def operate(operations, messages, model, start_time):
             operating_system.scroll(direction)
         elif operate_type == "solve_quiz":
             question = op.get("question")
-            #choices = op.get("choices")
+            choices = op.get("choices")
             operate_detail = f"Solving quiz for: {question}"
             
-            correct_answer = solve_quiz(question)
+            correct_answer = solve_quiz(question, choices)
             
             summary = f"I have solved the quiz. The correct answer for '{question}' is '{correct_answer}'. My next action will be to click this answer."
             messages.append({"role": "assistant", "content": summary})
