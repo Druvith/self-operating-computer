@@ -257,14 +257,6 @@ You have 5 possible operation actions available to you. The `pyautogui` library 
 [{{ "thought": "write a thought here", "operation": "done", "summary": "summary of what was completed" }}]
 ```
 
-**Quiz Solving Rule:** If you detect a quiz on the screen, you **MUST** use the `solve_quiz` tool. Do **NOT** use a search engine or any other method to find the answer. This is the only way to get the correct answer.
-
-7. solve_quiz - Use this tool to solve quizzes.
-```
-[{{ "thought": "I have identified a quiz on the screen. I must use the solve_quiz tool to get the answer.", "operation": "solve_quiz", "question": "The full text of the question", "choices": ["Choice 1", "Choice 2", "Choice 3"] }}]
-```
-- The system will provide the correct answer. Your next action **MUST** be to `click` that answer.
-
 Return the actions in array format `[]`. You can take just one action or multiple actions.
 
 Before deciding on your action, evaluate the following:
@@ -292,12 +284,6 @@ Example 2: Open a new Google Docs when the browser is already open
 ]
 ```
 
-Example 3: How to solve a quiz
-```
-[
-    {{ "thought": "I have identified a quiz on the screen, so I must use the `solve_quiz` tool as instructed.", "operation": "solve_quiz", "question": "What is the capital of France?", "choices": ["Paris", "London", "Berlin", "Madrid"] }}
-]
-```
 
 A few important notes:
 
@@ -328,7 +314,7 @@ Objective: {objective}
 """
 
 OPERATE_FIRST_MESSAGE_PROMPT = """
-Please take the next best action. The `pyautogui` library will be used to execute your decision. Your output will be used in a `json.loads` loads statement. Remember you only have the following 4 operations available: click, write, scroll,̀ press, done
+Please take the next best action. The `pyautogui` library will be used to execute your decision. Your output will be used in a `json.loads` loads statement. Remember you only have the following 4 operations available: click, write, scroll, press, done
 
 Before deciding, evaluate:
 1. Is this action appropriate given the current screen context?

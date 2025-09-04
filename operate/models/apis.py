@@ -5,11 +5,19 @@ import os
 import time
 import traceback
 from importlib import resources
-
+from operate.exceptions import (
+    ModelNotRecognizedException,
+    APIError,
+    ModelResponseError,
+    ExecutionError,
+    OCRError
+)
 import easyocr
 import ollama
 from PIL import Image
 from ultralytics import YOLO
+import google.generativeai as genai
+from google.generativeai import protos
 
 from operate.config import Config
 from operate.exceptions import ModelNotRecognizedException
@@ -277,6 +285,8 @@ async def call_gemini_api_with_ocr(messages, objective, model):
             os.makedirs(screenshots_dir)
 
         screenshot_filename = os.path.join(screenshots_dir, "screenshot.png")
+
+        
         capture_screen_with_cursor(screenshot_filename)
 
         prompt = get_system_prompt(model, objective)
@@ -285,7 +295,42 @@ async def call_gemini_api_with_ocr(messages, objective, model):
         if config.verbose:
             print("[call_gemini_api_with_ocr] model", google_model)
 
-        response = google_model.generate_content([prompt, Image.open(screenshot_filename)])
+        solve_quiz_tool = protos.Tool(
+            function_declarations=[
+                protos.FunctionDeclaration(
+                    name="solve_quiz",
+                    description="Use this tool when you see a quiz on the screen. This tool can solve multiple-choice questions by querying a database of questions and answers.",
+                    parameters=protos.Schema(
+                        type=protos.Type.OBJECT,
+                        properties={
+                            "question": protos.Schema(type=protos.Type.STRING, description="The question to be answered"),
+                            "choices": protos.Schema(type=protos.Type.ARRAY, items=protos.Schema(type=protos.Type.STRING), description="The multiple choice options"),
+                        },
+                        required=["question", "choices"],
+                    ),
+                )
+            ]
+        )
+
+        tools = [solve_quiz_tool]
+        tool_config = protos.ToolConfig(
+            function_calling_config=protos.FunctionCallingConfig(
+                mode=protos.FunctionCallingConfig.Mode.AUTO
+            )
+        )
+
+        response = google_model.generate_content([prompt, Image.open(screenshot_filename)], tools=tools, tool_config=tool_config)
+
+        if response.candidates[0].content.parts[0].function_call.name == "solve_quiz":
+            function_call = response.candidates[0].content.parts[0].function_call
+            question = function_call.args["question"]
+            choices = list(function_call.args["choices"])
+            operation = {
+                "operation": "solve_quiz",
+                "question": question,
+                "choices": choices,
+            }
+            return [operation]
 
         content = response.text
         if config.verbose:
@@ -294,7 +339,7 @@ async def call_gemini_api_with_ocr(messages, objective, model):
 
         # Clean the response if it's in markdown format
         if content.startswith("```json"):
-            content = content[len("```json"):-len("```")]
+            content = content[len("```json"):-len("```")].strip()
 
         # used later for the messages
         content_str = content
@@ -427,15 +472,15 @@ async def call_gemini_api_with_ocr(messages, objective, model):
         messages.append(assistant_message)
 
         return processed_content
-
+    except OCRError as e:
+        raise ModelResponseError(f"OCR error: {e}")
     except Exception as e:
         print(
             f"{ANSI_GREEN}[Self-Operating Computer]{ANSI_BRIGHT_MAGENTA}[{model}] That did not work. Trying another method {ANSI_RESET}"
         )
         if config.verbose:
             print("[call_gemini_api_with_ocr] error", e)
-            traceback.print_exc()
-        return call_gpt_4o(messages)
+        raise ExecutionError(f"An unexpected error occurred in call_gemini_api_with_ocr: {e}")
 
 
 def call_gemini_api(messages, objective, model_name="gemini-2.5-flash"):
@@ -477,7 +522,7 @@ def call_gemini_api(messages, objective, model_name="gemini-2.5-flash"):
 
         # The response might be in a markdown format, so we need to clean it
         if content.startswith("```json"):
-            content = content[len("```json"):-len("```")]
+            content = content[len("```json"):-len("```")].strip()
 
         content = json.loads(content)
         if config.verbose:
@@ -923,8 +968,8 @@ async def call_gpt_4o_labeled(messages, objective, model):
                         coordinates,
                     )
                 image = Image.open(
-                    io.BytesIO(base64.b64decode(img_base64))
-                )  # Load the image to get its size
+                    io.BytesIO(base64.b64decode(img_base64)) # Load the image to get its size
+                )
                 image_size = image.size  # Get the size of the image (width, height)
                 click_position_percent = get_click_position_in_percent(
                     coordinates, image_size
@@ -1146,9 +1191,7 @@ async def call_claude_3_with_ocr(messages, objective, model):
             response = client.messages.create(
                 model="claude-3-opus-20240229",
                 max_tokens=3000,
-                system=f"This json string is not valid, when using with json.loads(content) \
-                it throws the following error: {e}, return correct json string. \
-                **REMEMBER** Only output json format, do not append any other text.",
+                system=f"This json string is not valid, when using with json.loads(content) \n                it throws the following error: {e}, return correct json string. \n                **REMEMBER** Only output json format, do not append any other text.",
                 messages=[{"role": "user", "content": content}],
             )
             content = response.content[0].text

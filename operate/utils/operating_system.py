@@ -25,13 +25,13 @@ class OperatingSystem:
         except Exception as e:
             print("[OperatingSystem][press] error:", e)
 
-    def mouse(self, click_detail):
+    def mouse(self, click_detail, click=True):
         try:
             x = convert_percent_to_decimal(click_detail.get("x"))
             y = convert_percent_to_decimal(click_detail.get("y"))
 
             if click_detail and isinstance(x, float) and isinstance(y, float):
-                self.click_at_percentage(x, y)
+                self.click_at_percentage(x, y, click=click)
 
         except Exception as e:
             print("[OperatingSystem][mouse] error:", e)
@@ -52,6 +52,7 @@ class OperatingSystem:
         duration=0.2,
         circle_radius=50,
         circle_duration=0.5,
+        click=True,
     ):
         try:
             screen_width, screen_height = pyautogui.size()
@@ -60,13 +61,14 @@ class OperatingSystem:
 
             pyautogui.moveTo(x_pixel, y_pixel, duration=duration)
 
-            start_time = time.time()
-            while time.time() - start_time < circle_duration:
-                angle = ((time.time() - start_time) / circle_duration) * 2 * math.pi
-                x = x_pixel + math.cos(angle) * circle_radius
-                y = y_pixel + math.sin(angle) * circle_radius
-                pyautogui.moveTo(x, y, duration=0.1)
+            if click:
+                start_time = time.time()
+                while time.time() - start_time < circle_duration:
+                    angle = ((time.time() - start_time) / circle_duration) * 2 * math.pi
+                    x = x_pixel + math.cos(angle) * circle_radius
+                    y = y_pixel + math.sin(angle) * circle_radius
+                    pyautogui.moveTo(x, y, duration=0.1)
 
-            pyautogui.click(x_pixel, y_pixel)
+                pyautogui.click(x_pixel, y_pixel)
         except Exception as e:
             print("[OperatingSystem][click_at_percentage] error:", e)
