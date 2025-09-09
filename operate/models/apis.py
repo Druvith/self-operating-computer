@@ -37,41 +37,42 @@ from operate.utils.style import ANSI_BRIGHT_MAGENTA, ANSI_GREEN, ANSI_RED, ANSI_
 
 # Load configuration
 config = Config()
+reader = easyocr.Reader(["en"], gpu=True)
 
 
-async def get_next_action(model, messages, objective, session_id):
+async def get_next_action(model, messages, objective, session_id, reader):
     if config.verbose:
         print("[Self-Operating Computer][get_next_action]")
         print("[Self-Operating Computer][get_next_action] model", model)
     if model == "gpt-4":
         return call_gpt_4o(messages), None
     if model == "qwen-vl":
-        operation = await call_qwen_vl_with_ocr(messages, objective, model)
+        operation = await call_qwen_vl_with_ocr(messages, objective, model, reader)
         return operation, None
     if model == "gpt-4-with-som":
         operation = await call_gpt_4o_labeled(messages, objective, model)
         return operation, None
     if model == "gpt-4-with-ocr":
-        operation = await call_gpt_4o_with_ocr(messages, objective, model)
+        operation = await call_gpt_4o_with_ocr(messages, objective, model, reader)
         return operation, None
     if model == "gpt-4.1-with-ocr":
-        operation = await call_gpt_4_1_with_ocr(messages, objective, model)
+        operation = await call_gpt_4_1_with_ocr(messages, objective, model, reader)
         return operation, None
     if model == "o1-with-ocr":
-        operation = await call_o1_with_ocr(messages, objective, model)
+        operation = await call_o1_with_ocr(messages, objective, model, reader)
         return operation, None
     if model == "agent-1":
         return "coming soon"
     if model == "gemini-pro-vision" or model == "gemini-1.5-pro":
         return call_gemini_api(messages, objective, model), None
     if model == "gemini-2.5-flash" or model == "gemini-2.5-pro":
-        operation = await call_gemini_api_with_ocr(messages, objective, model)
+        operation = await call_gemini_api_with_ocr(messages, objective, model, reader)
         return operation, None
     if model == "llava":
         operation = call_ollama_llava(messages)
         return operation, None
     if model == "claude-3":
-        operation = await call_claude_3_with_ocr(messages, objective, model)
+        operation = await call_claude_3_with_ocr(messages, objective, model, reader)
         return operation, None
     raise ModelNotRecognizedException(model)
 
@@ -153,7 +154,7 @@ def call_gpt_4o(messages):
         return call_gpt_4o(messages)
 
 
-async def call_qwen_vl_with_ocr(messages, objective, model):
+async def call_qwen_vl_with_ocr(messages, objective, model, reader):
     if config.verbose:
         print("[call_qwen_vl_with_ocr]")
 
@@ -271,7 +272,7 @@ async def call_qwen_vl_with_ocr(messages, objective, model):
         return gpt_4_fallback(messages, objective, model)
 
 
-async def call_gemini_api_with_ocr(messages, objective, model):
+async def call_gemini_api_with_ocr(messages, objective, model, reader):
     """
     Get the next action for Self-Operating Computer using Gemini API with OCR support
     """
@@ -348,6 +349,7 @@ async def call_gemini_api_with_ocr(messages, objective, model):
 
         processed_content = []
 
+
         for operation in content:
             if operation.get("operation") == "click":
                 text_to_click = operation.get("text")
@@ -362,7 +364,6 @@ async def call_gemini_api_with_ocr(messages, objective, model):
                     # Initialize EasyOCR Reader
                     if config.verbose:
                         print("[call_gemini_api_with_ocr][OCR] Initializing EasyOCR with English language support")
-                    reader = easyocr.Reader(["en"], gpu=True)
                     if config.verbose:
                         print("[call_gemini_api_with_ocr][OCR] EasyOCR reader initialized with detection and recognition models")
 
@@ -413,7 +414,7 @@ async def call_gemini_api_with_ocr(messages, objective, model):
                         f"[call_gemini_api_with_ocr][write_in] label: {label}, content: {content_to_write}"
                     )
 
-                reader = easyocr.Reader(["en"], gpu=True)
+                #reader = easyocr.Reader(["en"], gpu=True)
                 result = reader.readtext(screenshot_filename)
                 text_element_index = get_text_element(
                     result, label, screenshot_filename
@@ -482,7 +483,6 @@ async def call_gemini_api_with_ocr(messages, objective, model):
             print("[call_gemini_api_with_ocr] error", e)
         raise ExecutionError(f"An unexpected error occurred in call_gemini_api_with_ocr: {e}")
 
-
 def call_gemini_api(messages, objective, model_name="gemini-2.5-flash"):
     """
     Get the next action for Self-Operating Computer using Gemini API
@@ -545,7 +545,7 @@ def call_gemini_api(messages, objective, model_name="gemini-2.5-flash"):
         return call_gpt_4o(messages)
 
 
-async def call_gpt_4o_with_ocr(messages, objective, model):
+async def call_gpt_4o_with_ocr(messages, objective, model, reader):
     if config.verbose:
         print("[call_gpt_4o_with_ocr]")
 
@@ -658,7 +658,7 @@ async def call_gpt_4o_with_ocr(messages, objective, model):
         return gpt_4_fallback(messages, objective, model)
 
 
-async def call_gpt_4_1_with_ocr(messages, objective, model):
+async def call_gpt_4_1_with_ocr(messages, objective, model, reader):
     if config.verbose:
         print("[call_gpt_4_1_with_ocr]")
 
@@ -764,7 +764,7 @@ async def call_gpt_4_1_with_ocr(messages, objective, model):
         return gpt_4_fallback(messages, objective, model)
 
 
-async def call_o1_with_ocr(messages, objective, model):
+async def call_o1_with_ocr(messages, objective, model, reader):
     if config.verbose:
         print("[call_o1_with_ocr]")
 
@@ -1020,7 +1020,6 @@ async def call_gpt_4o_labeled(messages, objective, model):
             traceback.print_exc()
         return call_gpt_4o(messages)
 
-
 def call_ollama_llava(messages):
     if config.verbose:
         print("[call_ollama_llava]")
@@ -1099,7 +1098,7 @@ def call_ollama_llava(messages):
         return call_ollama_llava(messages)
 
 
-async def call_claude_3_with_ocr(messages, objective, model):
+async def call_claude_3_with_ocr(messages, objective, model, reader):
     if config.verbose:
         print("[call_claude_3_with_ocr]")
 
@@ -1291,7 +1290,6 @@ async def call_claude_3_with_ocr(messages, objective, model):
 
         return gpt_4_fallback(gpt4_messages, objective, model)
 
-
 def get_last_assistant_message(messages):
     """
     Retrieve the last message from the assistant in the messages array.
@@ -1304,7 +1302,6 @@ def get_last_assistant_message(messages):
             else:
                 return messages[index]
     return None  # Return None if no assistant message is found
-
 
 def gpt_4_fallback(messages, objective, model):
     if config.verbose:
@@ -1320,7 +1317,6 @@ def gpt_4_fallback(messages, objective, model):
         print("[gpt_4_fallback][updated] len(messages)", len(messages))
 
     return call_gpt_4o(messages)
-
 
 def confirm_system_prompt(messages, objective, model):
     """
@@ -1344,7 +1340,6 @@ def confirm_system_prompt(messages, objective, model):
                 print("[confirm_system_prompt][message] role", m["role"])
                 print("[confirm_system_prompt][message] content", m["content"])
                 print("------------------[end message]------------------")
-
 
 def clean_json(content):
     if config.verbose:

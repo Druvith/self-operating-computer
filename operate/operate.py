@@ -3,6 +3,7 @@ import os
 import time
 import asyncio
 import random
+import psutil
 from prompt_toolkit.shortcuts import message_dialog
 from prompt_toolkit import prompt
 from operate.exceptions import (
@@ -34,6 +35,8 @@ from operate.utils.style import (
 from operate.utils.operating_system import OperatingSystem
 from operate.models.apis import get_next_action
 from operate.tools import solve_quiz
+from operate.utils.logger import Logger
+reader = easyocr.Reader(["en"], gpu=True)
 
 # Load configuration
 config = Config()
@@ -52,6 +55,8 @@ def main(model, terminal_prompt, voice_mode=False, verbose_mode=False):
     Returns:
     None
     """
+
+    logger = Logger()
 
     mic = None
     # Initialize `WhisperMic`, if `voice_mode` is True
@@ -106,6 +111,8 @@ def main(model, terminal_prompt, voice_mode=False, verbose_mode=False):
         print(f"{ANSI_YELLOW}[User]{ANSI_RESET}")
         objective = prompt(style=style)
 
+    logger.log_task_info(objective, model)
+
     system_prompt = get_system_prompt(model, objective)
     system_message = {"role": "system", "content": system_prompt}
     messages = [system_message]
@@ -118,6 +125,7 @@ def main(model, terminal_prompt, voice_mode=False, verbose_mode=False):
     MAX_RETRIES = 3
     INITIAL_BACKOFF = 1
 
+
     while True:
         if config.verbose:
             print("[Self Operating Computer] loop_count", loop_count)
@@ -127,12 +135,15 @@ def main(model, terminal_prompt, voice_mode=False, verbose_mode=False):
         
         while retries < MAX_RETRIES:
             try:
+                time.sleep(1)
                 operations, session_id = asyncio.run(
-                    get_next_action(model, messages, objective, session_id)
+                    get_next_action(model, messages, objective, session_id, reader)
                 )
 
-                stop = operate(operations, messages, model, start_time)
+                stop = operate(operations, messages, model, start_time, logger, reader)
                 if stop:
+                    total_time = time.time() - start_time
+                    logger.log_summary(total_time)
                     return  # Exit the main function cleanly
 
                 # If successful, break the inner retry loop
@@ -166,9 +177,10 @@ def main(model, terminal_prompt, voice_mode=False, verbose_mode=False):
             break
 
 
-def operate(operations, messages, model, start_time):
+def operate(operations, messages, model, start_time, logger, reader):
     if config.verbose:
         print("[Self Operating Computer][operate]")
+
     for op in operations:
         if config.verbose:
             print("[Self Operating Computer][operate] operation", op)
@@ -182,6 +194,7 @@ def operate(operations, messages, model, start_time):
             print("[Self Operating Computer][operate] operate_type", operate_type)
 
         try:
+            step_start_time = time.time()
             if operate_type == "press" or operate_type == "hotkey":
                 keys = op.get("keys")
                 operate_detail = keys
@@ -207,9 +220,9 @@ def operate(operations, messages, model, start_time):
                 operate_detail = f"Solving quiz for: {question}"
                 
                 correct_answer = solve_quiz(question, choices)
+                correct_answer = correct_answer.replace("\"", "")
                 
                 # Find the coordinates of the correct answer on the screen
-                reader = easyocr.Reader(["en"], gpu=True)
                 screenshot_filename = os.path.join("screenshots", "screenshot.png")
                 result = reader.readtext(screenshot_filename)
                 text_element_index = get_text_element(result, correct_answer, screenshot_filename)
@@ -217,7 +230,16 @@ def operate(operations, messages, model, start_time):
                 
                 # Click on the correct answer
                 operating_system.mouse(coordinates, click=True)
+                
+                # Log the solve_quiz step
+                step_end_time = time.time()
+                logger.log_step(op, step_start_time, step_end_time)
 
+                # Log the click step
+                click_op = {"operation": "click", "x": coordinates["x"], "y": coordinates["y"]}
+                logger.log_step(click_op, step_start_time, step_end_time)
+
+                time.sleep(2)
                 
                 summary = f"I have solved the quiz. The correct answer for '{question}' is '{correct_answer}'. I have clicked on the answer. Moving into the next question."
                 messages.append({"role": "assistant", "content": summary})
@@ -251,6 +273,9 @@ def operate(operations, messages, model, start_time):
 
             else:
                 raise ModelResponseError(f"Unknown operation: {operate_type}")
+            
+            step_end_time = time.time()
+            logger.log_step(op, step_start_time, step_end_time)
 
         except Exception as e:
             raise ExecutionError(f"Error executing operation '{operate_type}': {e}")

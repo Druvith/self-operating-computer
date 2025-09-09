@@ -2,6 +2,7 @@ import pyautogui
 import platform
 import time
 import math
+import pygetwindow as gw
 
 from operate.utils.misc import convert_percent_to_decimal
 
@@ -9,7 +10,7 @@ from operate.utils.misc import convert_percent_to_decimal
 class OperatingSystem:
     def write(self, content):
         try:
-            content = content.replace("\\n", "\n")
+            content = content.replace("\n", "\n")
             for char in content:
                 pyautogui.write(char)
         except Exception as e:
@@ -55,6 +56,14 @@ class OperatingSystem:
         click=True,
     ):
         try:
+            # Bring the window to the front
+            try:
+                window = gw.getActiveWindow()
+                if window:
+                    window.activate()
+            except Exception as e:
+                print(f"[OperatingSystem][click_at_percentage] Failed to focus window: {e}")
+
             screen_width, screen_height = pyautogui.size()
             x_pixel = int(screen_width * float(x_percentage))
             y_pixel = int(screen_height * float(y_percentage))
