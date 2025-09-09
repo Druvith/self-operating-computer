@@ -170,3 +170,5 @@ screenshots/
 
 # Temporary directory for experiments
 /temp/
+
+logs/
