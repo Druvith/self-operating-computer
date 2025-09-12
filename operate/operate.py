@@ -135,7 +135,8 @@ def main(model, terminal_prompt, voice_mode=False, verbose_mode=False):
         
         while retries < MAX_RETRIES:
             try:
-                time.sleep(1)
+                # wait 0.2 seconds
+                time.sleep(0.5)
                 operations, session_id = asyncio.run(
                     get_next_action(model, messages, objective, session_id, reader)
                 )
@@ -184,8 +185,6 @@ def operate(operations, messages, model, start_time, logger, reader):
     for op in operations:
         if config.verbose:
             print("[Self Operating Computer][operate] operation", op)
-        # wait one second
-        time.sleep(1)
 
         operate_type = op.get("operation").lower()
         operate_thought = op.get("thought")

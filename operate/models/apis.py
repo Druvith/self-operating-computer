@@ -290,6 +290,20 @@ async def call_gemini_api_with_ocr(messages, objective, model, reader):
         
         capture_screen_with_cursor(screenshot_filename)
 
+        # Open the original screenshot
+        img = Image.open(screenshot_filename)
+
+        # Convert RGBA to RGB if necessary
+        if img.mode == "RGBA":
+            img = img.convert("RGB")
+
+        # Resize the image for the model
+        original_width, original_height = img.size
+        aspect_ratio = original_width / original_height
+        new_width = 1024  # A reasonable width for model processing
+        new_height = int(new_width / aspect_ratio)
+        img_resized = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
         prompt = get_system_prompt(model, objective)
         
         google_model = config.initialize_google(model)
@@ -320,7 +334,7 @@ async def call_gemini_api_with_ocr(messages, objective, model, reader):
             )
         )
 
-        response = google_model.generate_content([prompt, Image.open(screenshot_filename)], tools=tools, tool_config=tool_config)
+        response = google_model.generate_content([prompt, img_resized], tools=tools, tool_config=tool_config)
 
         if response.candidates[0].content.parts[0].function_call.name == "solve_quiz":
             function_call = response.candidates[0].content.parts[0].function_call
