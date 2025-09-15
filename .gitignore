@@ -172,3 +172,6 @@ screenshots/
 /temp/
 
 logs/
+prompt_for_llm.md
+test_gemini_output.py
+tests.md
