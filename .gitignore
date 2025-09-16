@@ -175,3 +175,6 @@ logs/
 prompt_for_llm.md
 test_gemini_output.py
 tests.md
+
+# Redis database file
+dump.rdb
