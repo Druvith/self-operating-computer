@@ -164,3 +164,14 @@ cython_debug/
 # Avoid sending testing screenshots up
 *.png
 operate/screenshots/
+ocr/
+scratchpad.md 
+screenshots/
+
+# Temporary directory for experiments
+/temp/
+
+logs/
+prompt_for_llm.md
+test_gemini_output.py
+tests.md

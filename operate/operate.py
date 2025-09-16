@@ -2,10 +2,20 @@ import sys
 import os
 import time
 import asyncio
+import random
+import psutil
 from prompt_toolkit.shortcuts import message_dialog
 from prompt_toolkit import prompt
-from operate.exceptions import ModelNotRecognizedException
+from operate.exceptions import (
+    ModelNotRecognizedException,
+    APIError,
+    ModelResponseError,
+    ExecutionError,
+    OCRError,
+)
 import platform
+import easyocr
+from operate.utils.ocr import get_text_coordinates, get_text_element
 
 # from operate.models.prompts import USER_QUESTION, get_system_prompt
 from operate.models.prompts import (
@@ -24,6 +34,9 @@ from operate.utils.style import (
 )
 from operate.utils.operating_system import OperatingSystem
 from operate.models.apis import get_next_action
+from operate.tools import solve_quiz
+from operate.utils.logger import Logger
+reader = easyocr.Reader(["en"], gpu=True)
 
 # Load configuration
 config = Config()
@@ -42,6 +55,8 @@ def main(model, terminal_prompt, voice_mode=False, verbose_mode=False):
     Returns:
     None
     """
+
+    logger = Logger()
 
     mic = None
     # Initialize `WhisperMic`, if `voice_mode` is True
@@ -96,6 +111,8 @@ def main(model, terminal_prompt, voice_mode=False, verbose_mode=False):
         print(f"{ANSI_YELLOW}[User]{ANSI_RESET}")
         objective = prompt(style=style)
 
+    logger.log_task_info(objective, model)
+
     system_prompt = get_system_prompt(model, objective)
     system_message = {"role": "system", "content": system_prompt}
     messages = [system_message]
@@ -104,84 +121,168 @@ def main(model, terminal_prompt, voice_mode=False, verbose_mode=False):
 
     session_id = None
 
+    start_time = time.time()
+    MAX_RETRIES = 3
+    INITIAL_BACKOFF = 1
+
+
     while True:
         if config.verbose:
             print("[Self Operating Computer] loop_count", loop_count)
-        try:
-            operations, session_id = asyncio.run(
-                get_next_action(model, messages, objective, session_id)
-            )
 
-            stop = operate(operations, model)
-            if stop:
+        retries = 0
+        backoff_time = INITIAL_BACKOFF
+        
+        while retries < MAX_RETRIES:
+            try:
+                # wait 0.2 seconds
+                time.sleep(0.5)
+                operations, session_id = asyncio.run(
+                    get_next_action(model, messages, objective, session_id, reader)
+                )
+
+                stop = operate(operations, messages, model, start_time, logger, reader)
+                if stop:
+                    total_time = time.time() - start_time
+                    logger.log_summary(total_time)
+                    return  # Exit the main function cleanly
+
+                # If successful, break the inner retry loop
                 break
 
-            loop_count += 1
-            if loop_count > 10:
-                break
-        except ModelNotRecognizedException as e:
-            print(
-                f"{ANSI_GREEN}[Self-Operating Computer]{ANSI_RED}[Error] -> {e} {ANSI_RESET}"
-            )
-            break
-        except Exception as e:
-            print(
-                f"{ANSI_GREEN}[Self-Operating Computer]{ANSI_RED}[Error] -> {e} {ANSI_RESET}"
-            )
+            except (APIError, ModelResponseError, ExecutionError, OCRError) as e:
+                retries += 1
+                print(f"{ANSI_YELLOW}[Self-Operating Computer][Warning] An error occurred: {e}. Retrying ({retries}/{MAX_RETRIES})...{ANSI_RESET}")
+
+                # Exponential backoff with jitter
+                sleep_time = backoff_time * (2 ** retries) + random.uniform(0, 1)
+                time.sleep(sleep_time)
+            
+            except (ModelNotRecognizedException, KeyboardInterrupt) as e:
+                print(f"{ANSI_RED}[Self-Operating Computer][Fatal Error] -> {e} {ANSI_RESET}")
+                return # Exit immediately
+
+            except Exception as e:
+                # Catch any other unexpected errors
+                print(f"{ANSI_RED}[Self-Operating Computer][Fatal Error] An unexpected error occurred: {e} {ANSI_RESET}")
+                return
+
+        if retries == MAX_RETRIES:
+            print(f"{ANSI_RED}[Self-Operating Computer][Fatal Error] Maximum retries reached. Aborting.{ANSI_RESET}")
+            break # Exit the main while loop
+
+
+        loop_count += 1
+        if loop_count > 50:
+            print(f"{ANSI_YELLOW}[Self-Operating Computer] Reached maximum loop count.{ANSI_RESET}")
             break
 
 
-def operate(operations, model):
+def operate(operations, messages, model, start_time, logger, reader):
     if config.verbose:
         print("[Self Operating Computer][operate]")
-    for operation in operations:
+
+    for op in operations:
         if config.verbose:
-            print("[Self Operating Computer][operate] operation", operation)
-        # wait one second
-        time.sleep(1)
-        operate_type = operation.get("operation").lower()
-        operate_thought = operation.get("thought")
+            print("[Self Operating Computer][operate] operation", op)
+
+        operate_type = op.get("operation").lower()
+        operate_thought = op.get("thought")
         operate_detail = ""
         if config.verbose:
             print("[Self Operating Computer][operate] operate_type", operate_type)
 
-        if operate_type == "press" or operate_type == "hotkey":
-            keys = operation.get("keys")
-            operate_detail = keys
-            operating_system.press(keys)
-        elif operate_type == "write":
-            content = operation.get("content")
-            operate_detail = content
-            operating_system.write(content)
-        elif operate_type == "click":
-            x = operation.get("x")
-            y = operation.get("y")
-            click_detail = {"x": x, "y": y}
-            operate_detail = click_detail
+        try:
+            step_start_time = time.time()
+            if operate_type == "press" or operate_type == "hotkey":
+                keys = op.get("keys")
+                operate_detail = keys
+                operating_system.press(keys)
+            elif operate_type == "write":
+                content = op.get("content")
+                operate_detail = content
+                operating_system.write(content)
+            elif operate_type == "click":
+                x = op.get("x")
+                y = op.get("y")
+                click_detail = {"x": x, "y": y}
+                operate_detail = click_detail
 
-            operating_system.mouse(click_detail)
-        elif operate_type == "done":
-            summary = operation.get("summary")
+                operating_system.mouse(click_detail, click=True)
+            elif operate_type == "scroll":
+                direction = op.get("direction")
+                operate_detail = direction
+                operating_system.scroll(direction)
+            elif operate_type == "solve_quiz":
+                question = op.get("question")
+                choices = op.get("choices")
+                operate_detail = f"Solving quiz for: {question}"
+                
+                correct_answer = solve_quiz(question, choices)
+                correct_answer = correct_answer.replace("\"", "")
+                
+                # Find the coordinates of the correct answer on the screen
+                screenshot_filename = os.path.join("screenshots", "screenshot.png")
+                result = reader.readtext(screenshot_filename)
+                text_element_index = get_text_element(result, correct_answer, screenshot_filename)
+                coordinates = get_text_coordinates(result, text_element_index, screenshot_filename)
+                
+                # Click on the correct answer
+                operating_system.mouse(coordinates, click=True)
+                
+                # Log the solve_quiz step
+                step_end_time = time.time()
+                logger.log_step(op, step_start_time, step_end_time)
 
-            print(
-                f"[{ANSI_GREEN}Self-Operating Computer {ANSI_RESET}|{ANSI_BRIGHT_MAGENTA} {model}{ANSI_RESET}]"
-            )
-            print(f"{ANSI_BLUE}Objective Complete: {ANSI_RESET}{summary}\n")
-            return True
+                # Log the click step
+                click_op = {"operation": "click", "x": coordinates["x"], "y": coordinates["y"]}
+                logger.log_step(click_op, step_start_time, step_end_time)
 
-        else:
-            print(
-                f"{ANSI_GREEN}[Self-Operating Computer]{ANSI_RED}[Error] unknown operation response :({ANSI_RESET}"
-            )
-            print(
-                f"{ANSI_GREEN}[Self-Operating Computer]{ANSI_RED}[Error] AI response {ANSI_RESET}{operation}"
-            )
-            return True
+                time.sleep(2)
+                
+                summary = f"I have solved the quiz. The correct answer for '{question}' is '{correct_answer}'. I have clicked on the answer. Moving into the next question."
+                messages.append({"role": "assistant", "content": summary})
+                print(f"[{ANSI_GREEN}Self-Operating Computer {ANSI_RESET}|{ANSI_BRIGHT_MAGENTA} {model}{ANSI_RESET}]")
+                print(f"{operate_thought}")
+                print(f"{ANSI_BLUE}Action: {ANSI_RESET}{summary}\n")
+                continue # Proceed to the next loop to get the click action
+            elif operate_type == "write_in":
+                label = op.get("label")
+                content = op.get("content")
+                operate_detail = f'label: {label}, content: {content}'
+                # The `write_in` operation is a combination of `click` and `write`
+                # as handled in the `call_gemini_api_with_ocr` function.
+                # We just need to handle the `click` and `write` here.
+                x = op.get("x")
+                y = op.get("y")
+                click_detail = {"x": x, "y": y}
+                operating_system.mouse(click_detail)
+                operating_system.write(content)
 
-        print(
-            f"[{ANSI_GREEN}Self-Operating Computer {ANSI_RESET}|{ANSI_BRIGHT_MAGENTA} {model}{ANSI_RESET}]"
-        )
-        print(f"{operate_thought}")
-        print(f"{ANSI_BLUE}Action: {ANSI_RESET}{operate_type} {operate_detail}\n")
+            elif operate_type == "done":
+                summary = op.get("summary")
+                end_time = time.time()
+                total_time = end_time - start_time
+
+                print(
+                    f"[{ANSI_GREEN}Self-Operating Computer {ANSI_RESET}|{ANSI_BRIGHT_MAGENTA} {model}{ANSI_RESET}]")
+                print(f"{ANSI_BLUE}Objective Complete: {ANSI_RESET}{summary}\n")
+                print(f"{ANSI_BLUE}Total time taken: {ANSI_RESET}{total_time:.2f} seconds\n")
+                return True
+
+            else:
+                raise ModelResponseError(f"Unknown operation: {operate_type}")
+            
+            step_end_time = time.time()
+            logger.log_step(op, step_start_time, step_end_time)
+
+        except Exception as e:
+            raise ExecutionError(f"Error executing operation '{operate_type}': {e}")
+
+
+    print(
+        f"[{ANSI_GREEN}Self-Operating Computer {ANSI_RESET}|{ANSI_BRIGHT_MAGENTA} {model}{ANSI_RESET}]")
+    print(f"{operate_thought}")
+    print(f"{ANSI_BLUE}Action: {ANSI_RESET}{operate_type} {operate_detail}\n")
 
     return False

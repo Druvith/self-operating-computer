@@ -2,6 +2,7 @@ from operate.config import Config
 from PIL import Image, ImageDraw
 import os
 from datetime import datetime
+from operate.exceptions import OCRError
 
 # Load configuration
 config = Config()
@@ -19,7 +20,7 @@ def get_text_element(result, search_text, image_path):
         int: The index of the element containing the search text.
 
     Raises:
-        Exception: If the text element is not found in the results.
+        OCRError: If the text element is not found in the results.
     """
     if config.verbose:
         print("[get_text_element]")
@@ -60,7 +61,7 @@ def get_text_element(result, search_text, image_path):
 
         return found_index
 
-    raise Exception("The text element was not found in the image")
+    raise OCRError("The text element was not found in the image")
 
 
 def get_text_coordinates(result, index, image_path):

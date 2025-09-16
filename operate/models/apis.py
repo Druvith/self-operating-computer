@@ -4,12 +4,20 @@ import json
 import os
 import time
 import traceback
-
+from importlib import resources
+from operate.exceptions import (
+    ModelNotRecognizedException,
+    APIError,
+    ModelResponseError,
+    ExecutionError,
+    OCRError
+)
 import easyocr
 import ollama
-import pkg_resources
 from PIL import Image
 from ultralytics import YOLO
+import google.generativeai as genai
+from google.generativeai import protos
 
 from operate.config import Config
 from operate.exceptions import ModelNotRecognizedException
@@ -29,38 +37,42 @@ from operate.utils.style import ANSI_BRIGHT_MAGENTA, ANSI_GREEN, ANSI_RED, ANSI_
 
 # Load configuration
 config = Config()
+reader = easyocr.Reader(["en"], gpu=True)
 
 
-async def get_next_action(model, messages, objective, session_id):
+async def get_next_action(model, messages, objective, session_id, reader):
     if config.verbose:
         print("[Self-Operating Computer][get_next_action]")
         print("[Self-Operating Computer][get_next_action] model", model)
     if model == "gpt-4":
         return call_gpt_4o(messages), None
     if model == "qwen-vl":
-        operation = await call_qwen_vl_with_ocr(messages, objective, model)
+        operation = await call_qwen_vl_with_ocr(messages, objective, model, reader)
         return operation, None
     if model == "gpt-4-with-som":
         operation = await call_gpt_4o_labeled(messages, objective, model)
         return operation, None
     if model == "gpt-4-with-ocr":
-        operation = await call_gpt_4o_with_ocr(messages, objective, model)
+        operation = await call_gpt_4o_with_ocr(messages, objective, model, reader)
         return operation, None
     if model == "gpt-4.1-with-ocr":
-        operation = await call_gpt_4_1_with_ocr(messages, objective, model)
+        operation = await call_gpt_4_1_with_ocr(messages, objective, model, reader)
         return operation, None
     if model == "o1-with-ocr":
-        operation = await call_o1_with_ocr(messages, objective, model)
+        operation = await call_o1_with_ocr(messages, objective, model, reader)
         return operation, None
     if model == "agent-1":
         return "coming soon"
-    if model == "gemini-pro-vision":
-        return call_gemini_pro_vision(messages, objective), None
+    if model == "gemini-pro-vision" or model == "gemini-1.5-pro":
+        return call_gemini_api(messages, objective, model), None
+    if model == "gemini-2.5-flash" or model == "gemini-2.5-pro":
+        operation = await call_gemini_api_with_ocr(messages, objective, model, reader)
+        return operation, None
     if model == "llava":
         operation = call_ollama_llava(messages)
         return operation, None
     if model == "claude-3":
-        operation = await call_claude_3_with_ocr(messages, objective, model)
+        operation = await call_claude_3_with_ocr(messages, objective, model, reader)
         return operation, None
     raise ModelNotRecognizedException(model)
 
@@ -142,7 +154,7 @@ def call_gpt_4o(messages):
         return call_gpt_4o(messages)
 
 
-async def call_qwen_vl_with_ocr(messages, objective, model):
+async def call_qwen_vl_with_ocr(messages, objective, model, reader):
     if config.verbose:
         print("[call_qwen_vl_with_ocr]")
 
@@ -210,7 +222,7 @@ async def call_qwen_vl_with_ocr(messages, objective, model):
                         text_to_click,
                     )
                 # Initialize EasyOCR Reader
-                reader = easyocr.Reader(["en"])
+                reader = easyocr.Reader(["en"], gpu=True)
 
                 # Read the screenshot
                 result = reader.readtext(screenshot_filename)
@@ -259,15 +271,246 @@ async def call_qwen_vl_with_ocr(messages, objective, model):
             traceback.print_exc()
         return gpt_4_fallback(messages, objective, model)
 
-def call_gemini_pro_vision(messages, objective):
+
+async def call_gemini_api_with_ocr(messages, objective, model, reader):
     """
-    Get the next action for Self-Operating Computer using Gemini Pro Vision
+    Get the next action for Self-Operating Computer using Gemini API with OCR support
     """
     if config.verbose:
-        print(
-            "[Self Operating Computer][call_gemini_pro_vision]",
+        print("[call_gemini_api_with_ocr]")
+
+    try:
+        time.sleep(1)
+        screenshots_dir = "screenshots"
+        if not os.path.exists(screenshots_dir):
+            os.makedirs(screenshots_dir)
+
+        screenshot_filename = os.path.join(screenshots_dir, "screenshot.png")
+
+        
+        capture_screen_with_cursor(screenshot_filename)
+
+        # Open the original screenshot
+        img = Image.open(screenshot_filename)
+
+        # Convert RGBA to RGB if necessary
+        if img.mode == "RGBA":
+            img = img.convert("RGB")
+
+        # Resize the image for the model
+        original_width, original_height = img.size
+        aspect_ratio = original_width / original_height
+        new_width = 1024  # A reasonable width for model processing
+        new_height = int(new_width / aspect_ratio)
+        img_resized = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+        prompt = get_system_prompt(model, objective)
+        
+        google_model = config.initialize_google(model)
+        if config.verbose:
+            print("[call_gemini_api_with_ocr] model", google_model)
+
+        solve_quiz_tool = protos.Tool(
+            function_declarations=[
+                protos.FunctionDeclaration(
+                    name="solve_quiz",
+                    description="Use this tool when you see a quiz on the screen. This tool can solve multiple-choice questions by querying a database of questions and answers.",
+                    parameters=protos.Schema(
+                        type=protos.Type.OBJECT,
+                        properties={
+                            "question": protos.Schema(type=protos.Type.STRING, description="The question to be answered"),
+                            "choices": protos.Schema(type=protos.Type.ARRAY, items=protos.Schema(type=protos.Type.STRING), description="The multiple choice options"),
+                        },
+                        required=["question", "choices"],
+                    ),
+                )
+            ]
         )
-    # sleep for a second
+
+        tools = [solve_quiz_tool]
+        tool_config = protos.ToolConfig(
+            function_calling_config=protos.FunctionCallingConfig(
+                mode=protos.FunctionCallingConfig.Mode.AUTO
+            )
+        )
+
+        response = google_model.generate_content([prompt, img_resized], tools=tools, tool_config=tool_config)
+
+        if response.candidates[0].content.parts[0].function_call.name == "solve_quiz":
+            function_call = response.candidates[0].content.parts[0].function_call
+            question = function_call.args["question"]
+            choices = list(function_call.args["choices"])
+            operation = {
+                "operation": "solve_quiz",
+                "question": question,
+                "choices": choices,
+            }
+            return [operation]
+
+        content = response.text
+        if config.verbose:
+            print("[call_gemini_api_with_ocr] response", response)
+            print("[call_gemini_api_with_ocr] content", content)
+
+        # Clean the response if it's in markdown format
+        if content.startswith("```json"):
+            content = content[len("```json"):-len("```")].strip()
+
+        # used later for the messages
+        content_str = content
+
+        content = json.loads(content)
+
+        processed_content = []
+
+
+        for operation in content:
+            if operation.get("operation") == "click":
+                text_to_click = operation.get("text")
+                if config.verbose:
+                    print(
+                        "[call_gemini_api_with_ocr][click] text_to_click",
+                        text_to_click,
+                    )
+                
+                # Only use OCR if text is specified
+                if text_to_click is not None:
+                    # Initialize EasyOCR Reader
+                    if config.verbose:
+                        print("[call_gemini_api_with_ocr][OCR] Initializing EasyOCR with English language support")
+                    if config.verbose:
+                        print("[call_gemini_api_with_ocr][OCR] EasyOCR reader initialized with detection and recognition models")
+
+                    # Read the screenshot
+                    if config.verbose:
+                        print(f"[call_gemini_api_with_ocr][OCR] Reading text from screenshot: {screenshot_filename}")
+                    result = reader.readtext(screenshot_filename)
+                    if config.verbose:
+                        print(f"[call_gemini_api_with_ocr][OCR] Found {len(result)} text elements")
+                        for i, (bbox, text, confidence) in enumerate(result):
+                            print(f"[call_gemini_api_with_ocr][OCR] Text {i}: '{text}' (confidence: {confidence:.2f})")
+
+                    text_element_index = get_text_element(
+                        result, text_to_click, screenshot_filename
+                    )
+                    coordinates = get_text_coordinates(
+                        result, text_element_index, screenshot_filename
+                    )
+
+                    # add `coordinates`` to `content`
+                    operation["x"] = coordinates["x"]
+                    operation["y"] = coordinates["y"]
+
+                    if config.verbose:
+                        print(
+                            "[call_gemini_api_with_ocr][click] text_element_index",
+                            text_element_index,
+                        )
+                        print(
+                            "[call_gemini_api_with_ocr][click] coordinates",
+                            coordinates,
+                        )
+                        print(
+                            "[call_gemini_api_with_ocr][click] final operation",
+                            operation,
+                        )
+                else:
+                    if config.verbose:
+                        print("[call_gemini_api_with_ocr][click] No text specified, using provided coordinates")
+
+                processed_content.append(operation)
+
+            elif operation.get("operation") == "write_in":
+                label = operation.get("label")
+                content_to_write = operation.get("content") 
+                if config.verbose:
+                    print(
+                        f"[call_gemini_api_with_ocr][write_in] label: {label}, content: {content_to_write}"
+                    )
+
+                #reader = easyocr.Reader(["en"], gpu=True)
+                result = reader.readtext(screenshot_filename)
+                text_element_index = get_text_element(
+                    result, label, screenshot_filename
+                )
+                coordinates = get_text_coordinates(
+                    result, text_element_index, screenshot_filename
+                )
+
+                # Assuming the input field is to the right of the label
+                operation["x"] = coordinates["x"] + 0.05 
+                operation["y"] = coordinates["y"]
+                
+                # Replace "write_in" with "click" and then add a "write" operation
+                click_operation = {"operation": "click", "x": operation["x"], "y": operation["y"]}
+                write_operation = {"operation": "write", "content": content_to_write}
+                processed_content.extend([click_operation, write_operation])
+
+            elif operation.get("operation") == "read_text_from":
+                anchor = operation.get("anchor")
+                if config.verbose:
+                    print(f"[call_gemini_api_with_ocr][read_text_from] anchor: {anchor}")
+
+                reader = easyocr.Reader(["en"], gpu=True)
+                result = reader.readtext(screenshot_filename)
+                
+                anchor_element_index = get_text_element(
+                    result, anchor, screenshot_filename
+                )
+                anchor_coordinates = get_text_coordinates(
+                    result, anchor_element_index, screenshot_filename
+                )
+
+                # Define a region around the anchor to read text from
+                x, y = anchor_coordinates["x"], anchor_coordinates["y"]
+                width, height = 0.2, 0.1 # Define a search area, can be adjusted
+                
+                read_text = ""
+                for i, (bbox, text, confidence) in enumerate(result):
+                    text_x = (bbox[0][0] + bbox[1][0]) / 2 / Image.open(screenshot_filename).width
+                    text_y = (bbox[0][1] + bbox[2][1]) / 2 / Image.open(screenshot_filename).height
+                    if x < text_x < x + width and y < text_y < y + height:
+                        read_text += text + " "
+                
+                # We need to re-prompt the model with the read text
+                # This is a simplified approach. A more robust solution would be to
+                # add the read text to the message history and re-run the model.
+                # For now, we'll just print it to the console.
+                print(f"[call_gemini_api_with_ocr][read_text_from] Read text: {read_text}")
+                # We don't add any operation to processed_content as this is an information gathering step
+
+            else:
+                processed_content.append(operation)
+
+        # wait to append the assistant message so that if the `processed_content` step fails we don't append a message and mess up message history
+        assistant_message = {"role": "assistant", "content": content_str}
+        messages.append(assistant_message)
+
+        return processed_content
+    except OCRError as e:
+        raise ModelResponseError(f"OCR error: {e}")
+    except Exception as e:
+        print(
+            f"{ANSI_GREEN}[Self-Operating Computer]{ANSI_BRIGHT_MAGENTA}[{model}] That did not work. Trying another method {ANSI_RESET}"
+        )
+        if config.verbose:
+            print("[call_gemini_api_with_ocr] error", e)
+        raise ExecutionError(f"An unexpected error occurred in call_gemini_api_with_ocr: {e}")
+
+def call_gemini_api(messages, objective, model_name="gemini-2.5-flash"):
+    """
+    Get the next action for Self-Operating Computer using Gemini API
+    """
+    # Purpose: Calls the Gemini API to get the next action based on the screen content and objective.
+    # - messages: The history of messages exchanged with the model.
+    # - objective: The user's high-level goal.
+    # - model_name: The specific Gemini model to use.
+    # Comment: This function was updated to support the new Gemini API structure.
+    # It now constructs a prompt with the image and text, and parses the JSON response.
+    if config.verbose:
+        print(
+            "[Self Operating Computer][call_gemini_api]",
+        )
     time.sleep(1)
     try:
         screenshots_dir = "screenshots"
@@ -275,33 +518,38 @@ def call_gemini_pro_vision(messages, objective):
             os.makedirs(screenshots_dir)
 
         screenshot_filename = os.path.join(screenshots_dir, "screenshot.png")
-        # Call the function to capture the screen with the cursor
         capture_screen_with_cursor(screenshot_filename)
-        # sleep for a second
         time.sleep(1)
-        prompt = get_system_prompt("gemini-pro-vision", objective)
 
-        model = config.initialize_google()
+        prompt = get_system_prompt(model_name, objective)
+
+        model = config.initialize_google(model_name)
         if config.verbose:
-            print("[call_gemini_pro_vision] model", model)
+            print("[call_gemini_api] model", model)
 
         response = model.generate_content([prompt, Image.open(screenshot_filename)])
 
-        content = response.text[1:]
+        content = response.text
         if config.verbose:
-            print("[call_gemini_pro_vision] response", response)
-            print("[call_gemini_pro_vision] content", content)
+            print("[call_gemini_api] response", response)
+            print("[call_gemini_api] content", content)
+
+        # The response might be in a markdown format, so we need to clean it
+        if content.startswith("```json"):
+            content = content[len("```json"):-len("```")].strip()
 
         content = json.loads(content)
         if config.verbose:
             print(
-                "[get_next_action][call_gemini_pro_vision] content",
+                "[get_next_action][call_gemini_api] content",
                 content,
             )
 
         return content
 
     except Exception as e:
+        print("GEMINI_API_FAILED_WITH_EXCEPTION")
+        print(e)
         print(
             f"{ANSI_GREEN}[Self-Operating Computer]{ANSI_BRIGHT_MAGENTA}[Operate] That did not work. Trying another method {ANSI_RESET}"
         )
@@ -311,7 +559,7 @@ def call_gemini_pro_vision(messages, objective):
         return call_gpt_4o(messages)
 
 
-async def call_gpt_4o_with_ocr(messages, objective, model):
+async def call_gpt_4o_with_ocr(messages, objective, model, reader):
     if config.verbose:
         print("[call_gpt_4o_with_ocr]")
 
@@ -374,7 +622,7 @@ async def call_gpt_4o_with_ocr(messages, objective, model):
                         text_to_click,
                     )
                 # Initialize EasyOCR Reader
-                reader = easyocr.Reader(["en"])
+                reader = easyocr.Reader(["en"], gpu=True)
 
                 # Read the screenshot
                 result = reader.readtext(screenshot_filename)
@@ -424,7 +672,7 @@ async def call_gpt_4o_with_ocr(messages, objective, model):
         return gpt_4_fallback(messages, objective, model)
 
 
-async def call_gpt_4_1_with_ocr(messages, objective, model):
+async def call_gpt_4_1_with_ocr(messages, objective, model, reader):
     if config.verbose:
         print("[call_gpt_4_1_with_ocr]")
 
@@ -483,7 +731,7 @@ async def call_gpt_4_1_with_ocr(messages, objective, model):
                         "[call_gpt_4_1_with_ocr][click] text_to_click",
                         text_to_click,
                     )
-                reader = easyocr.Reader(["en"])
+                reader = easyocr.Reader(["en"], gpu=True)
 
                 result = reader.readtext(screenshot_filename)
 
@@ -530,7 +778,7 @@ async def call_gpt_4_1_with_ocr(messages, objective, model):
         return gpt_4_fallback(messages, objective, model)
 
 
-async def call_o1_with_ocr(messages, objective, model):
+async def call_o1_with_ocr(messages, objective, model, reader):
     if config.verbose:
         print("[call_o1_with_ocr]")
 
@@ -593,7 +841,7 @@ async def call_o1_with_ocr(messages, objective, model):
                         text_to_click,
                     )
                 # Initialize EasyOCR Reader
-                reader = easyocr.Reader(["en"])
+                reader = easyocr.Reader(["en"], gpu=True)
 
                 # Read the screenshot
                 result = reader.readtext(screenshot_filename)
@@ -650,7 +898,7 @@ async def call_gpt_4o_labeled(messages, objective, model):
         client = config.initialize_openai()
 
         confirm_system_prompt(messages, objective, model)
-        file_path = pkg_resources.resource_filename("operate.models.weights", "best.pt")
+        file_path = resources.files('operate.models.weights') / 'best.pt'
         yolo_model = YOLO(file_path)  # Load your trained model
         screenshots_dir = "screenshots"
         if not os.path.exists(screenshots_dir):
@@ -734,8 +982,8 @@ async def call_gpt_4o_labeled(messages, objective, model):
                         coordinates,
                     )
                 image = Image.open(
-                    io.BytesIO(base64.b64decode(img_base64))
-                )  # Load the image to get its size
+                    io.BytesIO(base64.b64decode(img_base64)) # Load the image to get its size
+                )
                 image_size = image.size  # Get the size of the image (width, height)
                 click_position_percent = get_click_position_in_percent(
                     coordinates, image_size
@@ -785,7 +1033,6 @@ async def call_gpt_4o_labeled(messages, objective, model):
             print("[Self-Operating Computer][Operate] error", e)
             traceback.print_exc()
         return call_gpt_4o(messages)
-
 
 def call_ollama_llava(messages):
     if config.verbose:
@@ -865,7 +1112,7 @@ def call_ollama_llava(messages):
         return call_ollama_llava(messages)
 
 
-async def call_claude_3_with_ocr(messages, objective, model):
+async def call_claude_3_with_ocr(messages, objective, model, reader):
     if config.verbose:
         print("[call_claude_3_with_ocr]")
 
@@ -957,9 +1204,7 @@ async def call_claude_3_with_ocr(messages, objective, model):
             response = client.messages.create(
                 model="claude-3-opus-20240229",
                 max_tokens=3000,
-                system=f"This json string is not valid, when using with json.loads(content) \
-                it throws the following error: {e}, return correct json string. \
-                **REMEMBER** Only output json format, do not append any other text.",
+                system=f"This json string is not valid, when using with json.loads(content) \n                it throws the following error: {e}, return correct json string. \n                **REMEMBER** Only output json format, do not append any other text.",
                 messages=[{"role": "user", "content": content}],
             )
             content = response.content[0].text
@@ -982,7 +1227,7 @@ async def call_claude_3_with_ocr(messages, objective, model):
                         text_to_click,
                     )
                 # Initialize EasyOCR Reader
-                reader = easyocr.Reader(["en"])
+                reader = easyocr.Reader(["en"], gpu=True)
 
                 # Read the screenshot
                 result = reader.readtext(screenshot_filename)
@@ -1059,7 +1304,6 @@ async def call_claude_3_with_ocr(messages, objective, model):
 
         return gpt_4_fallback(gpt4_messages, objective, model)
 
-
 def get_last_assistant_message(messages):
     """
     Retrieve the last message from the assistant in the messages array.
@@ -1072,7 +1316,6 @@ def get_last_assistant_message(messages):
             else:
                 return messages[index]
     return None  # Return None if no assistant message is found
-
 
 def gpt_4_fallback(messages, objective, model):
     if config.verbose:
@@ -1088,7 +1331,6 @@ def gpt_4_fallback(messages, objective, model):
         print("[gpt_4_fallback][updated] len(messages)", len(messages))
 
     return call_gpt_4o(messages)
-
 
 def confirm_system_prompt(messages, objective, model):
     """
@@ -1112,7 +1354,6 @@ def confirm_system_prompt(messages, objective, model):
                 print("[confirm_system_prompt][message] role", m["role"])
                 print("[confirm_system_prompt][message] content", m["content"])
                 print("------------------[end message]------------------")
-
 
 def clean_json(content):
     if config.verbose:
