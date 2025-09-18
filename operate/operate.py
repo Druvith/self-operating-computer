@@ -99,7 +99,7 @@ def _run_operation_loop(model, objective, messages, logger, use_gpu: bool):
             raise Exception("Reached maximum loop count of 50. Aborting.")
 
 def run_automated_test(model, objective, verbose_mode=False):
-    """Automated entry point for running a test objective. Always uses CPU for stability."""
+    """Automated entry point for running a test objective. Uses GPU by default for performance."""
     config.verbose = verbose_mode
     config.validation(model, voice_mode=False)
     logger = Logger()
@@ -109,8 +109,8 @@ def run_automated_test(model, objective, verbose_mode=False):
     messages = [{"role": "system", "content": system_prompt}]
 
     # This will either return a summary or raise an exception
-    # It explicitly sets use_gpu=False for the automated test
-    return _run_operation_loop(model, objective, messages, logger, use_gpu=False)
+    # It explicitly sets use_gpu=True for the automated test
+    return _run_operation_loop(model, objective, messages, logger, use_gpu=True)
 
 def main(model, terminal_prompt, voice_mode=False, verbose_mode=False):
     """Main function for interactive use of the Self-Operating Computer. Uses GPU by default."""
