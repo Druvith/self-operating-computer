@@ -15,34 +15,43 @@ from operate.operate import run_automated_test
 # In-memory storage for job queue and results
 job_queue = queue.Queue()
 job_results = {}
+shutdown_event = threading.Event()
 
 def worker():
     """The worker thread that processes jobs from the queue sequentially."""
-    while True:
-        job_id, objective = job_queue.get()
-        print(f"[Worker] Picked up job {job_id}: {objective}")
-        job_results[job_id] = {"status": "RUNNING", "result": None}
+    while not shutdown_event.is_set():
         try:
-            summary = run_automated_test(model="gemini-2.5-flash", objective=objective)
-            job_results[job_id] = {"status": "SUCCESS", "result": summary}
-            print(f"[Worker] Job {job_id} completed successfully.")
-        except Exception as e:
-            error_message = str(e)
-            job_results[job_id] = {"status": "FAILURE", "result": error_message}
-            print(f"[Worker] Job {job_id} failed: {error_message}")
-        finally:
-            job_queue.task_done()
+            # Wait for a job with a timeout to allow checking the shutdown event
+            job_id, objective = job_queue.get(timeout=1)
+            print(f"[Worker] Picked up job {job_id}: {objective}")
+            job_results[job_id] = {"status": "RUNNING", "result": None}
+            try:
+                summary = run_automated_test(model="gemini-2.5-flash", objective=objective)
+                job_results[job_id] = {"status": "SUCCESS", "result": summary}
+                print(f"[Worker] Job {job_id} completed successfully.")
+            except Exception as e:
+                error_message = str(e)
+                job_results[job_id] = {"status": "FAILURE", "result": error_message}
+                print(f"[Worker] Job {job_id} failed: {error_message}")
+            finally:
+                job_queue.task_done()
+        except queue.Empty:
+            # This is expected when the queue is empty, just continue the loop
+            continue
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manages the startup and shutdown of the application."""
     # Start the worker thread
-    worker_thread = threading.Thread(target=worker, daemon=True)
+    worker_thread = threading.Thread(target=worker)
     worker_thread.start()
     print("Worker thread started.")
     yield
-    # Cleanup can be done here if needed
-    print("Application shutting down.")
+    # Cleanup: Signal the worker to shut down and wait for it
+    print("Shutting down worker thread...")
+    shutdown_event.set()
+    worker_thread.join() # Wait for the worker thread to finish
+    print("Worker thread shut down gracefully.")
 
 app = FastAPI(lifespan=lifespan)
 
