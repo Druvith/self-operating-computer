@@ -162,7 +162,7 @@ cython_debug/
 .DS_Store
 
 # Avoid sending testing screenshots up
-*.png
+
 operate/screenshots/
 ocr/
 scratchpad.md 
