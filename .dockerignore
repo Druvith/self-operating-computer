@@ -1,0 +1,24 @@
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Python virtual environment and cache
+.venv
+*.pyc
+__pycache__/
+self_operating_computer.egg-info/
+
+# IDE and local config
+.idea/
+.vscode/
+.qodo/
+
+# Other
+.pytest_cache/
+screenshots/
+temp/
+logs/
