@@ -14,12 +14,19 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     xvfb \
     fluxbox \
-    firefox \
     git \
     xauth \
     python3-tk \
     python3-dev \
+    libpci3 \
+    libegl1-mesa \
     && rm -rf /var/lib/apt/lists/*
+
+# Add Mozilla PPA and install Firefox ESR
+RUN apt-get update && apt-get install -y software-properties-common && \
+    add-apt-repository ppa:mozillateam/ppa && \
+    apt-get update && \
+    apt-get install -y firefox-esr
 
 # Set up a working directory
 WORKDIR /app

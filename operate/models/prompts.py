@@ -1,5 +1,7 @@
 import platform
+import os
 from operate.config import Config
+from operate.models.headless_prompt import SYSTEM_PROMPT_HEADLESS
 
 # Load configuration
 config = Config()
@@ -338,6 +340,10 @@ def get_system_prompt(model, objective):
     """
     Format the vision prompt more efficiently and print the name of the prompt used
     """
+
+    # Check if running inside a Docker container
+    if os.path.exists('/.dockerenv'):
+        return SYSTEM_PROMPT_HEADLESS.format(objective=objective)
 
     if platform.system() == "Darwin":
         cmd_string = "\"command\""
