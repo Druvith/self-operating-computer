@@ -1,0 +1,22 @@
+
+{
+  "policies": {
+    "DisableAppUpdate": true,
+    "DisableFirefoxStudies": true,
+    "DisableTelemetry": true,
+    "NoDefaultBrowserCheck": true,
+    "DontCheckDefaultBrowser": true,
+    "DisableFirefoxAccounts": true,
+    "WelcomePage": {
+      "url": "about:blank",
+      "displayed": true,
+      "locked": true
+    },
+    "FirefoxHome": {
+        "SearchEngine": "duckduckgo",
+        "Locked": true
+    },
+    "OverrideFirstRunPage": "about:blank",
+    "OverridePostUpdatePage": "about:blank"
+  }
+}
