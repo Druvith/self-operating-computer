@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y \
     libpci3 \
     libegl1-mesa \
     firefox-esr \
+    xterm \
     && rm -rf /var/lib/apt/lists/*
 
 # Set up a working directory

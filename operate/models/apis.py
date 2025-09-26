@@ -65,7 +65,7 @@ async def get_next_action(model, messages, objective, session_id, reader):
         return "coming soon"
     if model == "gemini-pro-vision" or model == "gemini-1.5-pro":
         return call_gemini_api(messages, objective, model), None
-    if model == "gemini-2.5-flash" or model == "gemini-2.5-pro":
+    if model == "gemini-flash-latest" or model == "gemini-2.5-flash" or model == "gemini-2.5-pro":
         operation = await call_gemini_api_with_ocr(messages, objective, model, reader)
         return operation, None
     if model == "llava":

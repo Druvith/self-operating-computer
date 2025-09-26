@@ -92,7 +92,7 @@ class Config:
         client.base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
         return client
 
-    def initialize_google(self, model_name="gemini-1.5-pro-latest"):
+    def initialize_google(self, model_name="gemini-flash-latest"):
         print("INITIALIZING GOOGLE")
         # Purpose: Initializes and configures the Google Generative AI client.
         #- model_name: The specific Gemini model to be used.

@@ -16,6 +16,9 @@ xauth generate $DISPLAY . trusted
 # Start the window manager in the background
 fluxbox & 
 
+# Start a terminal in the background
+xterm & 
+
 # Start the FastAPI application using uvicorn
 # --host 0.0.0.0 makes it accessible from outside the container
 echo "Starting FastAPI server..."

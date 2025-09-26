@@ -36,20 +36,20 @@ from operate.utils.operating_system import OperatingSystem
 from operate.models.apis import get_next_action
 from operate.tools import solve_quiz
 from operate.utils.logger import Logger
-#reader = easyocr.Reader(["en"], gpu=True)
+import easyocr
 
 # Load configuration
 config = Config()
 operating_system = OperatingSystem()
 
+# Initialize EasyOCR Reader
+print("Initializing EasyOCR with GPU...")
+reader = easyocr.Reader(["en"], gpu=True)
+print("EasyOCR initialized.")
 
-def _run_operation_loop(model, objective, messages, logger, use_gpu: bool):
+
+def _run_operation_loop(model, objective, messages, logger, reader):
     """Core loop for the Self-Operating Computer, designed to be reusable."""
-    # Initialize EasyOCR Reader within the loop, with specified GPU usage
-    print(f"Initializing EasyOCR with use_gpu={use_gpu}...")
-    reader = easyocr.Reader(["en"], gpu=use_gpu)
-    print("EasyOCR initialized.")
-
     loop_count = 0
     session_id = None
     start_time = time.time()
@@ -110,7 +110,7 @@ def run_automated_test(model, objective, verbose_mode=False):
 
     # This will either return a summary or raise an exception
     # It explicitly sets use_gpu=True for the automated test
-    return _run_operation_loop(model, objective, messages, logger, use_gpu=True)
+    return _run_operation_loop(model, objective, messages, logger, reader)
 
 def main(model, terminal_prompt, voice_mode=False, verbose_mode=False):
     """Main function for interactive use of the Self-Operating Computer. Uses GPU by default."""
@@ -160,7 +160,7 @@ def main(model, terminal_prompt, voice_mode=False, verbose_mode=False):
 
     try:
         # It explicitly sets use_gpu=True for interactive mode
-        summary = _run_operation_loop(model, objective, messages, logger, use_gpu=True)
+        summary = _run_operation_loop(model, objective, messages, logger, reader)
         if summary:
             print(f"{ANSI_GREEN}Objective completed successfully: {summary}{ANSI_RESET}")
     except Exception as e:

@@ -26,7 +26,7 @@ def worker():
             print(f"[Worker] Picked up job {job_id}: {objective}")
             job_results[job_id] = {"status": "RUNNING", "result": None}
             try:
-                summary = run_automated_test(model="gemini-2.5-flash", objective=objective)
+                summary = run_automated_test(model="gemini-flash-latest", objective=objective)
                 job_results[job_id] = {"status": "SUCCESS", "result": summary}
                 print(f"[Worker] Job {job_id} completed successfully.")
             except Exception as e:
